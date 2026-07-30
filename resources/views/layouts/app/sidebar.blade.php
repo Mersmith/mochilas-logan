@@ -15,6 +15,24 @@
                     <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
+                    <flux:sidebar.item icon="tag" :href="route('productos.index')" :current="request()->routeIs('productos.index*') || request()->routeIs('productos.manage*') || request()->routeIs('productos.create*')" wire:navigate>
+                        {{ __('Productos') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="clipboard-document-list" :href="route('guias.index')" :current="request()->routeIs('guias.index')" wire:navigate>
+                        {{ __('Guías de Inventario') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="chart-bar" :href="route('kardex.index')" :current="request()->routeIs('kardex.index')" wire:navigate>
+                        {{ __('Kardex Valorizado') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="shopping-cart" :href="route('ventas.index')" :current="request()->routeIs('ventas.index*') || request()->routeIs('ventas.create*')" wire:navigate>
+                        {{ __('Ventas / POS') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="ticket" :href="route('promociones.index')" :current="request()->routeIs('promociones.index')" wire:navigate>
+                        {{ __('Promociones / Cupones') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="wrench-screwdriver" :href="route('mantenimiento.index')" :current="request()->routeIs('mantenimiento.index')" wire:navigate>
+                        {{ __('Mantenimiento') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
