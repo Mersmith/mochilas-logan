@@ -249,7 +249,7 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 @forelse($this->productos as $p)
                     <!-- Tarjeta de Producto -->
-                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col justify-between relative h-full">
+                    <a href="{{ route('producto.detalle', ['producto' => $p->id, 'slug' => \Illuminate\Support\Str::slug($p->nombre)]) }}" wire:navigate class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col justify-between relative h-full">
                         
                         <!-- Badge de descuento -->
                         @if($p->tiene_descuento)
@@ -320,12 +320,13 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
                                 @endif
                             </div>
 
-                            <flux:button variant="ghost" size="sm" class="text-xs font-semibold" icon-trailing="chevron-right">
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">
                                 {{ __('Ver detalles') }}
-                            </flux:button>
+                                <flux:icon name="chevron-right" class="size-4" />
+                            </span>
                         </div>
 
-                    </div>
+                    </a>
                 @empty
                     <div class="col-span-full text-center py-20 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl">
                         <flux:icon name="magnifying-glass" class="size-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-4" />

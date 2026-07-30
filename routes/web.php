@@ -32,6 +32,15 @@ Route::middleware(['auth', 'verified', 'admin'])
 // Catálogo Público de E-Commerce (Búsqueda, Filtros y Campañas)
 Route::livewire('catalogo', 'pages::catalogo')->name('catalogo');
 
+// Ficha de Producto (Detalles, Selección de Variante e inventario)
+Route::livewire('producto/{producto}/{slug}', 'pages::producto')->name('producto.detalle');
+
+// Bolsa de Compras del Cliente
+Route::livewire('carrito', 'pages::carrito')->name('carrito');
+
+// Checkout / Confirmar Compra (requiere autenticación)
+Route::livewire('checkout', 'pages::checkout')->name('checkout')->middleware(['auth', 'verified']);
+
 // Despachador de Dashboard según Rol de Usuario
 Route::get('dashboard', function () {
     if (auth()->check()) {
