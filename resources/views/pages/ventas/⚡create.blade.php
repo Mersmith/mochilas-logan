@@ -414,7 +414,7 @@ new #[Title('Registrar Venta')] class extends Component {
         });
 
         Flux::toast(variant: 'success', text: __('Venta registrada y stock descontado del almacén.'));
-        $this->redirect(route('ventas.index'), navigate: true);
+        $this->redirect(route('admin.ventas.index'), navigate: true);
     }
 
     /**
@@ -666,7 +666,7 @@ new #[Title('Registrar Venta')] class extends Component {
 
                 <!-- Botones de Acción -->
                 <div class="flex items-center justify-end gap-4">
-                    <flux:button variant="ghost" :href="route('ventas.index')" wire:navigate>
+                    <flux:button variant="ghost" :href="route('admin.ventas.index')" wire:navigate>
                         {{ __('Cancelar') }}
                     </flux:button>
                     

@@ -74,7 +74,7 @@ new #[Title('Guías de Inventario')] class extends Component {
             <flux:subheading>{{ __('Historial de movimientos de entrada, salida y transferencias.') }}</flux:subheading>
         </div>
         
-        <flux:button variant="primary" icon="plus" :href="route('guias.create')" wire:navigate>
+        <flux:button variant="primary" icon="plus" :href="route('admin.guias.create')" wire:navigate>
             {{ __('Nueva Guía') }}
         </flux:button>
     </div>

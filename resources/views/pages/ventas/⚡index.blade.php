@@ -133,7 +133,7 @@ new #[Title('Historial de Ventas')] class extends Component {
             <flux:subheading>{{ __('Listado de boletas, facturas y notas de venta emitidas.') }}</flux:subheading>
         </div>
         
-        <flux:button variant="primary" icon="plus" :href="route('ventas.create')" wire:navigate>
+        <flux:button variant="primary" icon="plus" :href="route('admin.ventas.create')" wire:navigate>
             {{ __('Registrar Venta (POS)') }}
         </flux:button>
     </div>

@@ -54,7 +54,7 @@ new #[Title('Catálogo de Productos')] class extends Component {
             <flux:subheading>{{ __('Administra los productos de tu catálogo, gestiona sus variaciones, precios y empaques.') }}</flux:subheading>
         </div>
         
-        <flux:button variant="primary" icon="plus" :href="route('productos.create')" wire:navigate>
+        <flux:button variant="primary" icon="plus" :href="route('admin.productos.create')" wire:navigate>
             {{ __('Nuevo Producto') }}
         </flux:button>
     </div>
@@ -104,7 +104,7 @@ new #[Title('Catálogo de Productos')] class extends Component {
                                 @endif
                             </td>
                             <td class="p-4 text-right space-x-2">
-                                <flux:button variant="ghost" icon="cog" size="sm" :href="route('productos.manage', $prod)" wire:navigate title="Gestionar Variaciones, Precios y Empaques" />
+                                <flux:button variant="ghost" icon="cog" size="sm" :href="route('admin.productos.manage', $prod)" wire:navigate title="Gestionar Variaciones, Precios y Empaques" />
                                 <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $prod->id }})" wire:confirm="¿Está seguro de eliminar este producto?" title="Eliminar Producto" />
                             </td>
                         </tr>

@@ -43,7 +43,7 @@ new #[Title('Nuevo Producto')] class extends Component {
         ]);
 
         Flux::toast(variant: 'success', text: __('Producto creado. Defina ahora sus variaciones y empaques.'));
-        $this->redirect(route('productos.manage', $producto), navigate: true);
+        $this->redirect(route('admin.productos.manage', $producto), navigate: true);
     }
 
     /**
@@ -117,7 +117,7 @@ new #[Title('Nuevo Producto')] class extends Component {
 
         <!-- Botones -->
         <div class="flex items-center justify-end gap-4 border-t border-zinc-200 dark:border-zinc-700 pt-4">
-            <flux:button variant="ghost" :href="route('productos.index')" wire:navigate>
+            <flux:button variant="ghost" :href="route('admin.productos.index')" wire:navigate>
                 {{ __('Cancelar') }}
             </flux:button>
             <flux:button variant="primary" type="submit">

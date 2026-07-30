@@ -277,7 +277,7 @@ new #[Title('Gestionar Producto')] class extends Component {
             <flux:subheading>{{ __('Gestión de variaciones, precios y presentaciones de empaque para el producto.') }}</flux:subheading>
         </div>
         
-        <flux:button variant="ghost" icon="arrow-left" :href="route('productos.index')" wire:navigate>
+        <flux:button variant="ghost" icon="arrow-left" :href="route('admin.productos.index')" wire:navigate>
             {{ __('Volver al catálogo') }}
         </flux:button>
     </div>

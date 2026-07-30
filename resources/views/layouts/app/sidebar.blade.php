@@ -6,31 +6,31 @@
     <body class="min-h-screen bg-white dark:bg-zinc-800">
         <flux:sidebar sticky collapsible="mobile" class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:sidebar.header>
-                <x-app-logo :sidebar="true" href="{{ route('dashboard') }}" wire:navigate />
+                <x-app-logo :sidebar="true" href="{{ route('admin.dashboard') }}" wire:navigate />
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
 
             <flux:sidebar.nav>
                 <flux:sidebar.group :heading="__('Platform')" class="grid">
-                    <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                    <flux:sidebar.item icon="home" :href="route('admin.dashboard')" :current="request()->routeIs('admin.dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="tag" :href="route('productos.index')" :current="request()->routeIs('productos.index*') || request()->routeIs('productos.manage*') || request()->routeIs('productos.create*')" wire:navigate>
+                    <flux:sidebar.item icon="tag" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.index*') || request()->routeIs('admin.productos.manage*') || request()->routeIs('admin.productos.create*')" wire:navigate>
                         {{ __('Productos') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="clipboard-document-list" :href="route('guias.index')" :current="request()->routeIs('guias.index')" wire:navigate>
+                    <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.guias.index')" :current="request()->routeIs('admin.guias.index*')" wire:navigate>
                         {{ __('Guías de Inventario') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="chart-bar" :href="route('kardex.index')" :current="request()->routeIs('kardex.index')" wire:navigate>
+                    <flux:sidebar.item icon="chart-bar" :href="route('admin.kardex.index')" :current="request()->routeIs('admin.kardex.index*')" wire:navigate>
                         {{ __('Kardex Valorizado') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="shopping-cart" :href="route('ventas.index')" :current="request()->routeIs('ventas.index*') || request()->routeIs('ventas.create*')" wire:navigate>
+                    <flux:sidebar.item icon="shopping-cart" :href="route('admin.ventas.index')" :current="request()->routeIs('admin.ventas.index*') || request()->routeIs('admin.ventas.create*')" wire:navigate>
                         {{ __('Ventas / POS') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="ticket" :href="route('promociones.index')" :current="request()->routeIs('promociones.index')" wire:navigate>
+                    <flux:sidebar.item icon="ticket" :href="route('admin.promociones.index')" :current="request()->routeIs('admin.promociones.index*')" wire:navigate>
                         {{ __('Promociones / Cupones') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="wrench-screwdriver" :href="route('mantenimiento.index')" :current="request()->routeIs('mantenimiento.index')" wire:navigate>
+                    <flux:sidebar.item icon="wrench-screwdriver" :href="route('admin.mantenimiento.index')" :current="request()->routeIs('admin.mantenimiento.index*')" wire:navigate>
                         {{ __('Mantenimiento') }}
                     </flux:sidebar.item>
                 </flux:sidebar.group>

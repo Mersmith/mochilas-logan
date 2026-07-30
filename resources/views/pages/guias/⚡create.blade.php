@@ -303,7 +303,7 @@ new #[Title('Registrar Guía de Inventario')] class extends Component {
         });
 
         Flux::toast(variant: 'success', text: $estado === 'Procesado' ? __('Guía procesada y stock actualizado.') : __('Guía guardada en borrador.'));
-        $this->redirect(route('guias.index'), navigate: true);
+        $this->redirect(route('admin.guias.index'), navigate: true);
     }
 
     /**
@@ -535,7 +535,7 @@ new #[Title('Registrar Guía de Inventario')] class extends Component {
 
         <!-- Botones de Acción -->
         <div class="flex items-center justify-end gap-4">
-            <flux:button variant="ghost" :href="route('guias.index')" wire:navigate>
+            <flux:button variant="ghost" :href="route('admin.guias.index')" wire:navigate>
                 {{ __('Cancelar') }}
             </flux:button>
             
