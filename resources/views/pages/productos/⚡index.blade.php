@@ -1,11 +1,14 @@
 <?php
 
+use App\Exports\ProductosExport;
 use App\Models\Producto;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
 use Flux\Flux;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 new #[Title('Catálogo de Productos')] class extends Component {
     use WithPagination;
@@ -45,6 +48,16 @@ new #[Title('Catálogo de Productos')] class extends Component {
         
         Flux::toast(variant: 'success', text: __('Producto eliminado correctamente.'));
     }
+
+    /**
+     * Export all products (respecting current search filter) to Excel.
+     */
+    public function exportar(): BinaryFileResponse
+    {
+        $filename = 'productos-' . now()->format('Y-m-d') . '.xlsx';
+
+        return Excel::download(new ProductosExport($this->search), $filename);
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -59,10 +72,23 @@ new #[Title('Catálogo de Productos')] class extends Component {
         </flux:button>
     </div>
 
-    <!-- Buscador -->
+    <!-- Buscador y Exportar -->
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700">
         <div class="w-full sm:w-80">
             <flux:input wire:model.live="search" placeholder="Buscar producto..." icon="magnifying-glass" />
+        </div>
+        <div class="flex items-center gap-2">
+            <flux:button
+                variant="ghost"
+                icon="arrow-down-tray"
+                wire:click="exportar"
+                wire:loading.attr="disabled"
+                wire:target="exportar"
+                title="{{ __('Exportar a Excel') }}"
+            >
+                <span wire:loading.remove wire:target="exportar">{{ __('Exportar Excel') }}</span>
+                <span wire:loading wire:target="exportar">{{ __('Generando...') }}</span>
+            </flux:button>
         </div>
     </div>
 

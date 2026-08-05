@@ -6,6 +6,8 @@ use App\Models\Inventario;
 use App\Models\Kardex;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Livewire\Attributes\Title;
@@ -124,6 +126,21 @@ new #[Title('Historial de Ventas')] class extends Component {
 
         Flux::toast(variant: 'success', text: __('Venta anulada e inventario restablecido.'));
     }
+
+    /**
+     * Download receipt PDF.
+     */
+    public function descargarPdf(int $id): StreamedResponse
+    {
+        $venta = Venta::with(['user', 'tipoDocumento', 'detalles.variacion.producto', 'detalles.variacion.valores.atributo', 'detalles.unidadMedida', 'movimientosKardex.almacen'])
+            ->findOrFail($id);
+
+        $pdf = Pdf::loadView('pdf.comprobante', compact('venta'));
+
+        return response()->streamDownload(function () use ($pdf) {
+            echo $pdf->output();
+        }, 'comprobante-' . $venta->serie . '-' . $venta->correlativo . '.pdf');
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -225,7 +242,13 @@ new #[Title('Historial de Ventas')] class extends Component {
                             <flux:heading size="lg">{{ $this->selectedVenta->tipoDocumento->nombre }}</flux:heading>
                             <flux:subheading>{{ $this->selectedVenta->serie }}-{{ str_pad($this->selectedVenta->correlativo, 6, '0', STR_PAD_LEFT) }}</flux:subheading>
                         </div>
-                        <flux:button variant="ghost" icon="x-mark" wire:click="$set('showDetailModal', false)" />
+                        <div class="flex items-center gap-2">
+                            <flux:button size="sm" variant="primary" icon="arrow-down-tray" wire:click="descargarPdf({{ $this->selectedVenta->id }})" wire:loading.attr="disabled" wire:target="descargarPdf">
+                                <span wire:loading.remove wire:target="descargarPdf">{{ __('Descargar PDF') }}</span>
+                                <span wire:loading wire:target="descargarPdf">{{ __('Generando...') }}</span>
+                            </flux:button>
+                            <flux:button variant="ghost" icon="x-mark" wire:click="$set('showDetailModal', false)" />
+                        </div>
                     </div>
 
                     <!-- Datos Venta -->

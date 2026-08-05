@@ -8,10 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class Producto extends Model
+class Producto extends Model implements HasMedia
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, InteractsWithMedia, SoftDeletes;
 
     protected $fillable = [
         'tipo_producto_id',
@@ -26,6 +29,39 @@ class Producto extends Model
     protected $casts = [
         'activo' => 'boolean',
     ];
+
+    /**
+     * Register media collections for this model.
+     * - imagen_principal: a single cover image shown in catalog and product detail.
+     * - galeria: up to 10 images for the product gallery carousel.
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('imagen_principal')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+
+        $this->addMediaCollection('galeria')
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+    }
+
+    /**
+     * Register media conversions (auto-generated thumbnails).
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(400)
+            ->height(400)
+            ->sharpen(5)
+            ->nonQueued();
+
+        $this->addMediaConversion('card')
+            ->width(800)
+            ->height(600)
+            ->sharpen(5)
+            ->nonQueued();
+    }
 
     /**
      * Get the type of product.

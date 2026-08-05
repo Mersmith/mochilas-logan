@@ -32,12 +32,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // 0. Crear Roles y Permisos primero
+        $this->call(RolesAndPermissionsSeeder::class);
+
         // 1. Crear Usuario Admin por defecto
         $admin = User::factory()->create([
             'name' => 'Administrador Logan',
             'email' => 'admin@logan.com',
             'password' => bcrypt('password'),
         ]);
+        $admin->assignRole('admin');
 
         // 2. Crear Sedes
         $sedeCentral = Sede::create([

@@ -6,10 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class Categoria extends Model
+class Categoria extends Model implements HasMedia
 {
-    use HasFactory;
+    use HasFactory, InteractsWithMedia;
 
     protected $fillable = [
         'categoria_padre_id',
@@ -25,6 +28,29 @@ class Categoria extends Model
         'activo' => 'boolean',
         'orden' => 'integer',
     ];
+
+    /**
+     * Register media collections for this model.
+     * - imagen: a single banner/icon image shown in category browsing.
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('imagen')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+    }
+
+    /**
+     * Register media conversions (auto-generated thumbnails).
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(300)
+            ->height(200)
+            ->sharpen(5)
+            ->nonQueued();
+    }
 
     /**
      * Get the parent category.

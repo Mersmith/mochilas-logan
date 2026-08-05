@@ -4,47 +4,86 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
-Route::middleware(['auth', 'verified', 'admin'])
+// =============================================
+// ZONA ADMINISTRATIVA (requiere permiso: panel.acceder)
+// =============================================
+Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
-        Route::livewire('dashboard', 'pages::dashboard')->name('dashboard');
-        Route::livewire('guias', 'pages::guias.index')->name('guias.index');
-        Route::livewire('guias/crear', 'pages::guias.create')->name('guias.create');
-        Route::livewire('kardex', 'pages::kardex.index')->name('kardex.index');
 
-        // Rutas de Catálogo de Productos
-        Route::livewire('productos', 'pages::productos.index')->name('productos.index');
-        Route::livewire('productos/crear', 'pages::productos.create')->name('productos.create');
-        Route::livewire('productos/{producto}/gestionar', 'pages::productos.manage')->name('productos.manage');
+        // Dashboard (admin y supervisor)
+        Route::livewire('dashboard', 'pages::dashboard')
+            ->name('dashboard')
+            ->middleware('permission:dashboard.ver');
 
-        // Rutas del Módulo de Ventas
-        Route::livewire('ventas', 'pages::ventas.index')->name('ventas.index');
-        Route::livewire('ventas/nueva', 'pages::ventas.create')->name('ventas.create');
+        // Guías de Inventario (almacen, logistica, supervisor, admin)
+        Route::livewire('guias', 'pages::guias.index')
+            ->name('guias.index')
+            ->middleware('permission:guias.ver');
+        Route::livewire('guias/crear', 'pages::guias.create')
+            ->name('guias.create')
+            ->middleware('permission:guias.crear');
 
-        // Rutas de Descuentos y Cupones
-        Route::livewire('promociones', 'pages::promociones.index')->name('promociones.index');
+        // Kardex (almacen, supervisor, admin)
+        Route::livewire('kardex', 'pages::kardex.index')
+            ->name('kardex.index')
+            ->middleware('permission:kardex.ver');
 
-        // Rutas de Mantenimiento Base
-        Route::livewire('mantenimiento', 'pages::mantenimiento.index')->name('mantenimiento.index');
+        // Catálogo de Productos
+        Route::livewire('productos', 'pages::productos.index')
+            ->name('productos.index')
+            ->middleware('permission:productos.ver');
+        Route::livewire('productos/crear', 'pages::productos.create')
+            ->name('productos.create')
+            ->middleware('permission:productos.crear');
+        Route::livewire('productos/{producto}/gestionar', 'pages::productos.manage')
+            ->name('productos.manage')
+            ->middleware('permission:productos.editar');
+
+        // Ventas / POS (vendedor, supervisor, admin)
+        Route::livewire('ventas', 'pages::ventas.index')
+            ->name('ventas.index')
+            ->middleware('permission:ventas.ver');
+        Route::livewire('ventas/nueva', 'pages::ventas.create')
+            ->name('ventas.create')
+            ->middleware('permission:ventas.crear');
+
+        // Promociones y Cupones (supervisor, admin)
+        Route::livewire('promociones', 'pages::promociones.index')
+            ->name('promociones.index')
+            ->middleware('permission:promociones.ver');
+
+        // Mantenimiento Base (solo admin)
+        Route::livewire('mantenimiento', 'pages::mantenimiento.index')
+            ->name('mantenimiento.index')
+            ->middleware('permission:mantenimiento.ver');
     });
 
-// Catálogo Público de E-Commerce (Búsqueda, Filtros y Campañas)
+// =============================================
+// ZONA PÚBLICA: E-Commerce (sin autenticación)
+// =============================================
+
+// Catálogo Público
 Route::livewire('catalogo', 'pages::catalogo')->name('catalogo');
 
-// Ficha de Producto (Detalles, Selección de Variante e inventario)
+// Ficha de Producto
 Route::livewire('producto/{producto}/{slug}', 'pages::producto')->name('producto.detalle');
 
-// Bolsa de Compras del Cliente
+// Bolsa de Compras
 Route::livewire('carrito', 'pages::carrito')->name('carrito');
 
-// Checkout / Confirmar Compra (requiere autenticación)
-Route::livewire('checkout', 'pages::checkout')->name('checkout')->middleware(['auth', 'verified']);
+// Checkout (requiere estar autenticado)
+Route::livewire('checkout', 'pages::checkout')
+    ->name('checkout')
+    ->middleware(['auth', 'verified']);
 
-// Despachador de Dashboard según Rol de Usuario
+// =============================================
+// DESPACHADOR DE DASHBOARD SEGÚN ROL
+// =============================================
 Route::get('dashboard', function () {
     if (auth()->check()) {
-        if (in_array(auth()->user()->role, ['admin', 'employee'])) {
+        if (auth()->user()->hasPermissionTo('panel.acceder')) {
             return redirect()->route('admin.dashboard');
         }
 
