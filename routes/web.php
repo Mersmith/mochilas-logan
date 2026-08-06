@@ -54,10 +54,34 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
             ->name('promociones.index')
             ->middleware('permission:promociones.ver');
 
-        // Mantenimiento Base (solo admin)
-        Route::livewire('mantenimiento', 'pages::mantenimiento.index')
-            ->name('mantenimiento.index')
-            ->middleware('permission:mantenimiento.ver');
+        // =============================================
+        // MÓDULOS DE CONFIGURACIÓN Y MANTENIMIENTO
+        // =============================================
+
+        Route::livewire('almacenes', 'pages::almacenes.index')
+            ->name('almacenes.index')
+            ->middleware('permission:almacenes.ver');
+
+        Route::livewire('series', 'pages::series.index')
+            ->name('series.index')
+            ->middleware('permission:series.ver');
+
+        Route::livewire('tipos-documento', 'pages::tipos-documento.index')
+            ->name('tipos-documento.index')
+            ->middleware('permission:tipos-documento.ver');
+
+        Route::livewire('tipos-producto', 'pages::tipos-producto.index')
+            ->name('tipos-producto.index')
+            ->middleware('permission:tipos-producto.ver');
+
+        Route::livewire('proveedores', 'pages::proveedores.index')
+            ->name('proveedores.index')
+            ->middleware('permission:proveedores.ver');
+
+        // Sedes (Mantenimiento)
+        Route::livewire('sedes', 'pages::sedes.index')
+            ->name('sedes.index')
+            ->middleware('permission:sedes.ver');
 
         // Seguridad (Roles y Permisos - admin)
         Route::livewire('roles', 'pages::roles.index')

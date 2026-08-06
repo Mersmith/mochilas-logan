@@ -48,9 +48,20 @@ class RolesAndPermissionsSeeder extends Seeder
             'promociones.ver',
             'promociones.crear',
 
-            // Mantenimiento Base
-            'mantenimiento.ver',
-            'mantenimiento.editar',
+            // Módulos de Mantenimiento / Configuración Base
+            'almacenes.ver',
+            'almacenes.editar',
+            'series.ver',
+            'series.editar',
+            'tipos-documento.ver',
+            'tipos-documento.editar',
+            'tipos-producto.ver',
+            'tipos-producto.editar',
+            'proveedores.ver',
+            'proveedores.editar',
+            // Sedes
+            'sedes.ver',
+            'sedes.editar',
 
             // Seguridad (Roles y Permisos)
             'roles.ver',
