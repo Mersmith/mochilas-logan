@@ -58,6 +58,15 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
         Route::livewire('mantenimiento', 'pages::mantenimiento.index')
             ->name('mantenimiento.index')
             ->middleware('permission:mantenimiento.ver');
+
+        // Seguridad (Roles y Permisos - admin)
+        Route::livewire('roles', 'pages::roles.index')
+            ->name('roles.index')
+            ->middleware('permission:roles.ver');
+
+        Route::livewire('permisos', 'pages::permisos.index')
+            ->name('permisos.index')
+            ->middleware('permission:permisos.ver');
     });
 
 // =============================================
@@ -83,8 +92,26 @@ Route::livewire('checkout', 'pages::checkout')
 // =============================================
 Route::get('dashboard', function () {
     if (auth()->check()) {
-        if (auth()->user()->hasPermissionTo('panel.acceder')) {
+        $user = auth()->user();
+
+        if ($user->hasPermissionTo('dashboard.ver')) {
             return redirect()->route('admin.dashboard');
+        }
+
+        if ($user->hasPermissionTo('ventas.ver')) {
+            return redirect()->route('admin.ventas.index');
+        }
+
+        if ($user->hasPermissionTo('guias.ver')) {
+            return redirect()->route('admin.guias.index');
+        }
+
+        if ($user->hasPermissionTo('productos.ver')) {
+            return redirect()->route('admin.productos.index');
+        }
+
+        if ($user->hasPermissionTo('panel.acceder')) {
+            return redirect()->route('admin.dashboard'); // Fallback in case of weird permissions
         }
 
         return redirect()->route('home');

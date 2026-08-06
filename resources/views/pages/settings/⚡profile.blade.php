@@ -117,8 +117,41 @@ new #[Title('Profile settings')] class extends Component {
             </div>
         </form>
 
+        <div class="my-10 border-t border-zinc-200 dark:border-zinc-700 pt-6">
+            <flux:heading size="lg">{{ __('Roles y Permisos') }}</flux:heading>
+            <flux:subheading>{{ __('Tus niveles de acceso en el sistema') }}</flux:subheading>
+
+            <div class="mt-6 space-y-4">
+                <div>
+                    <span class="text-sm font-medium text-zinc-500 uppercase">{{ __('Rol Actual') }}</span>
+                    <div class="mt-2 flex gap-2">
+                        @forelse(auth()->user()->roles as $role)
+                            <flux:badge color="primary" class="capitalize">{{ $role->name }}</flux:badge>
+                        @empty
+                            <span class="text-zinc-500 text-sm">{{ __('Sin rol asignado') }}</span>
+                        @endforelse
+                    </div>
+                </div>
+                
+                <div class="pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                    <span class="text-sm font-medium text-zinc-500 uppercase mb-2 block">{{ __('Permisos Autorizados') }}</span>
+                    <div class="flex flex-wrap gap-2">
+                        @forelse(auth()->user()->getAllPermissions() as $permission)
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
+                                {{ $permission->name }}
+                            </span>
+                        @empty
+                            <span class="text-zinc-500 text-sm">{{ __('No cuentas con permisos adicionales.') }}</span>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        </div>
+
         @if ($this->showDeleteUser)
-            <livewire:pages::settings.delete-user-form />
+            <div class="my-10 border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                <livewire:pages::settings.delete-user-form />
+            </div>
         @endif
     </x-pages::settings.layout>
 </section>

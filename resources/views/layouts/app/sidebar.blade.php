@@ -54,6 +54,22 @@
                         </flux:sidebar.item>
                     @endcan
                 </flux:sidebar.group>
+
+                @if(auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
+                    <flux:sidebar.group :heading="__('Seguridad')" class="grid">
+                        @can('roles.ver')
+                            <flux:sidebar.item icon="users" :href="route('admin.roles.index')" :current="request()->routeIs('admin.roles.index*')" wire:navigate>
+                                {{ __('Roles') }}
+                            </flux:sidebar.item>
+                        @endcan
+
+                        @can('permisos.ver')
+                            <flux:sidebar.item icon="key" :href="route('admin.permisos.index')" :current="request()->routeIs('admin.permisos.index*')" wire:navigate>
+                                {{ __('Permisos') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
+                @endif
             </flux:sidebar.nav>
 
             <flux:spacer />

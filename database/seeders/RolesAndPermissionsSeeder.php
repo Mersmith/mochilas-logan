@@ -51,6 +51,16 @@ class RolesAndPermissionsSeeder extends Seeder
             // Mantenimiento Base
             'mantenimiento.ver',
             'mantenimiento.editar',
+
+            // Seguridad (Roles y Permisos)
+            'roles.ver',
+            'roles.crear',
+            'roles.editar',
+            'roles.eliminar',
+            'permisos.ver',
+            'permisos.crear',
+            'permisos.editar',
+            'permisos.eliminar',
         ];
 
         foreach ($permissions as $permission) {
@@ -122,7 +132,33 @@ class RolesAndPermissionsSeeder extends Seeder
             $adminUser->assignRole('admin');
         }
 
-        $this->command->info('✅ Roles y permisos creados correctamente.');
+        // =============================================
+        // 4. CREAR USUARIOS DE PRUEBA PARA CADA ROL
+        // =============================================
+        $testUsers = [
+            ['name' => 'Usuario Supervisor', 'email' => 'supervisor@logan.com', 'role' => 'supervisor'],
+            ['name' => 'Usuario Vendedor', 'email' => 'vendedor@logan.com', 'role' => 'vendedor'],
+            ['name' => 'Usuario Almacen', 'email' => 'almacen@logan.com', 'role' => 'almacen'],
+            ['name' => 'Usuario Logistica', 'email' => 'logistica@logan.com', 'role' => 'logistica'],
+            ['name' => 'Usuario Cliente', 'email' => 'cliente@logan.com', 'role' => 'cliente'],
+        ];
+
+        foreach ($testUsers as $userData) {
+            $user = User::firstOrCreate(
+                ['email' => $userData['email']],
+                [
+                    'name' => $userData['name'],
+                    'password' => bcrypt('password'),
+                    'email_verified_at' => now(),
+                ]
+            );
+
+            if (! $user->hasRole($userData['role'])) {
+                $user->assignRole($userData['role']);
+            }
+        }
+
+        $this->command->info('✅ Roles, permisos y usuarios de prueba creados correctamente.');
         $this->command->table(
             ['Rol', 'Permisos'],
             Role::with('permissions')->get()->map(fn ($r) => [
