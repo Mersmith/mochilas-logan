@@ -164,7 +164,7 @@ new #[Title('Gestión de Sedes')] class extends Component {
         </div>
         <div class="flex flex-wrap items-center gap-2">
             <flux:dropdown>
-                <flux:button variant="subtle" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
                 <flux:menu>
                     <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todas las sedes') }}
                     </flux:menu.item>
@@ -207,7 +207,7 @@ new #[Title('Gestión de Sedes')] class extends Component {
                 <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
             </div>
             <div class="flex-1 sm:text-right">
-                <flux:button variant="ghost" wire:click="resetFiltros" icon="arrow-path">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
                     {{ __('Limpiar Filtros') }}
                 </flux:button>
             </div>
@@ -226,6 +226,8 @@ new #[Title('Gestión de Sedes')] class extends Component {
                         <th class="p-3">{{ __('Dirección') }}</th>
                         <th class="p-3 text-center">{{ __('Almacenes') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
                         @can('sedes.editar')
                             <th class="p-3"></th>
                         @endcan
@@ -245,12 +247,28 @@ new #[Title('Gestión de Sedes')] class extends Component {
                                 {{ $sede->almacenes_count }}
                             </td>
                             <td class="p-3 text-center">
-                                @if($sede->trashed())
-                                    <flux:badge color="red">{{ __('Eliminada') }}</flux:badge>
-                                @elseif($sede->activo)
-                                    <flux:badge color="success">{{ __('Activo') }}</flux:badge>
+                                @if($sede->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
                                 @else
-                                    <flux:badge color="zinc">{{ __('Desactivado') }}</flux:badge>
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $sede->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($sede->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminada') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitida') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
                                 @endif
                             </td>
                             @can('sedes.editar')
