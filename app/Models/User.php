@@ -31,8 +31,9 @@ use Spatie\Permission\Traits\HasRoles;
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
  * @property bool $activo
+ * @property bool $is_super_admin
  */
-#[Fillable(['name', 'email', 'password', 'activo'])]
+#[Fillable(['name', 'email', 'password', 'activo', 'is_super_admin'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -50,6 +51,7 @@ class User extends Authenticatable implements PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'activo' => 'boolean',
+            'is_super_admin' => 'boolean',
         ];
     }
 

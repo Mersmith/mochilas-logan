@@ -127,6 +127,12 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
         Route::livewire('usuarios', 'pages::usuarios.index')
             ->name('usuarios.index')
             ->middleware('permission:usuarios.ver');
+        Route::livewire('usuarios/crear', 'pages::usuarios.create')
+            ->name('usuarios.create')
+            ->middleware('permission:usuarios.editar');
+        Route::livewire('usuarios/{usuario}/editar', 'pages::usuarios.edit')
+            ->name('usuarios.edit')
+            ->middleware('permission:usuarios.editar');
 
         Route::livewire('roles', 'pages::roles.index')
             ->name('roles.index')

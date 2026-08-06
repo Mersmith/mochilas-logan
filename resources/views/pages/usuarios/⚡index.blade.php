@@ -1,28 +1,34 @@
 <?php
 
 use App\Models\User;
+use App\Exports\UsuariosExport;
 use Flux\Flux;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Role;
 
 new #[Title('Gestión de Usuarios')] class extends Component {
-    // ── Filtros ──────────────────────────────────────────
-    public string $search = '';
-    public string $filtroRol = '';
-    public string $filtroEstado = 'activos'; // activos | eliminados | todos
+    use WithPagination;
 
-    // ── Formulario Crear/Editar ───────────────────────────
-    public ?int $usuario_id = null;
-    public string $nombre = '';
-    public string $email = '';
-    public string $password = '';
-    public string $password_confirmation = '';
-    public string $rol = '';
-    public bool $activo = true;
-    public bool $showForm = false;
+    // ── Filtros ──────────────────────────────────────────
+    #[Url(as: 'q')]
+    public string $search = '';
+    #[Url]
+    public string $filtroRol = '';
+    #[Url]
+    public string $filtroEstado = 'todos'; // activos | desactivados | todos
+    #[Url]
+    public string $filtroPapelera = 'admitidos'; // admitidos | eliminados | todos
+    #[Url]
+    public string $desde = '';
+    #[Url]
+    public string $hasta = '';
+    #[Url]
+    public int $perPage = 10;
 
     // ── Modal Cambiar Contraseña ──────────────────────────
     public ?int $cambiarPass_usuario_id = null;
@@ -30,12 +36,29 @@ new #[Title('Gestión de Usuarios')] class extends Component {
     public string $nueva_password_confirmation = '';
 
     /**
-     * Lista de usuarios con filtros.
+     * Resetea la paginación cuando cambia algún filtro
      */
-    #[Computed]
-    public function usuarios()
+    public function updating($property)
+    {
+        if (in_array($property, ['search', 'filtroRol', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
+        }
+    }
+
+    public function resetFiltros()
+    {
+        $this->reset(['search', 'filtroRol', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+
+    /**
+     * Devuelve el query builder base con los filtros aplicados.
+     */
+    protected function getBaseQuery()
     {
         $query = User::with('roles')
+            ->where('is_super_admin', false) // super admin is invisible
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('name', 'like', '%'.$this->search.'%')
                     ->orWhere('email', 'like', '%'.$this->search.'%');
@@ -43,14 +66,34 @@ new #[Title('Gestión de Usuarios')] class extends Component {
             ->when($this->filtroRol, fn ($q) => $q->role($this->filtroRol))
             ->orderBy('name');
 
-        if ($this->filtroEstado === 'eliminados') {
-            $query->onlyTrashed();
-        } elseif ($this->filtroEstado === 'todos') {
-            $query->withTrashed();
+        // Filtro de estado de cuenta (Activo / Inactivo)
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
         }
-        // 'activos' → por defecto (sin trashed)
 
-        return $query->get();
+        // Filtro de papelera (Soft Deletes)
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        } // Si es 'admitidos', no se aplica nada (usa el default de sin trashed)
+
+        // Filtro de Fechas
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+              ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    /**
+     * Lista de usuarios paginada.
+     */
+    #[Computed]
+    public function usuarios()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
     }
 
     /**
@@ -63,62 +106,6 @@ new #[Title('Gestión de Usuarios')] class extends Component {
     }
 
     /**
-     * Guardar o actualizar usuario.
-     */
-    public function guardar(): void
-    {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
-            abort(403);
-        }
-
-        $rules = [
-            'nombre' => 'required|string|max:255',
-            'email'  => ['required', 'email', Rule::unique('users', 'email')->ignore($this->usuario_id)->whereNull('deleted_at')],
-            'rol'    => 'required|exists:roles,name',
-        ];
-
-        if (! $this->usuario_id) {
-            $rules['password'] = 'required|string|min:8|confirmed';
-        }
-
-        $this->validate($rules);
-
-        if ($this->usuario_id) {
-            $usuario = User::withTrashed()->findOrFail($this->usuario_id);
-            $usuario->update(['name' => $this->nombre, 'email' => $this->email, 'activo' => $this->activo]);
-            $usuario->syncRoles([$this->rol]);
-            Flux::toast(variant: 'success', text: 'Usuario actualizado correctamente.');
-        } else {
-            $usuario = User::create([
-                'name'     => $this->nombre,
-                'email'    => $this->email,
-                'password' => bcrypt($this->password),
-                'activo'   => $this->activo,
-            ]);
-            $usuario->assignRole($this->rol);
-            Flux::toast(variant: 'success', text: 'Usuario creado correctamente.');
-        }
-
-        $this->limpiarForm();
-    }
-
-    /**
-     * Cargar datos del usuario en el formulario.
-     */
-    public function editar(int $id): void
-    {
-        $usuario = User::withTrashed()->with('roles')->findOrFail($id);
-        $this->usuario_id = $usuario->id;
-        $this->nombre = $usuario->name;
-        $this->email = $usuario->email;
-        $this->rol = $usuario->roles->first()?->name ?? '';
-        $this->activo = $usuario->activo;
-        $this->password = '';
-        $this->password_confirmation = '';
-        $this->showForm = true;
-    }
-
-    /**
      * Eliminación lógica (soft delete).
      */
     public function eliminar(int $id): void
@@ -128,6 +115,10 @@ new #[Title('Gestión de Usuarios')] class extends Component {
         }
 
         $usuario = User::findOrFail($id);
+
+        if ($usuario->is_super_admin) {
+            abort(403, 'Este usuario no puede ser modificado.');
+        }
 
         if ($usuario->id === auth()->id()) {
             Flux::toast(variant: 'warning', text: 'No puedes eliminar tu propia cuenta.');
@@ -148,6 +139,10 @@ new #[Title('Gestión de Usuarios')] class extends Component {
         }
 
         $usuario = User::findOrFail($id);
+
+        if ($usuario->is_super_admin) {
+            abort(403, 'Este usuario no puede ser modificado.');
+        }
 
         if ($usuario->id === auth()->id()) {
             Flux::toast(variant: 'warning', text: 'No puedes desactivarte a ti mismo.');
@@ -211,107 +206,48 @@ new #[Title('Gestión de Usuarios')] class extends Component {
         $this->nueva_password_confirmation = '';
     }
 
-    public function limpiarForm(): void
+    // ── Exportaciones ──────────────────────────────────────────
+
+    public function exportarTodos()
     {
-        $this->usuario_id = null;
-        $this->nombre = '';
-        $this->email = '';
-        $this->password = '';
-        $this->password_confirmation = '';
-        $this->rol = '';
-        $this->activo = true;
-        $this->showForm = false;
+        // Query sin filtros (pero excluyendo al super admin siempre)
+        $query = User::with('roles')->where('is_super_admin', false)->orderBy('name');
+        return Excel::download(new UsuariosExport($query), 'todos_los_usuarios.xlsx');
     }
 
-    public function nuevoUsuario(): void
+    public function exportarFiltrados()
     {
-        $this->limpiarForm();
-        $this->showForm = true;
+        $query = $this->getBaseQuery();
+        return Excel::download(new UsuariosExport($query), 'usuarios_filtrados.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
     {{-- Header --}}
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Gestión de Usuarios') }}</flux:heading>
             <flux:subheading>{{ __('Administra los usuarios del sistema y sus roles de acceso.') }}</flux:subheading>
         </div>
-        @can('usuarios.editar')
-            <flux:button variant="primary" icon="plus" wire:click="nuevoUsuario">
-                {{ __('Nuevo Usuario') }}
-            </flux:button>
-        @endcan
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button variant="subtle" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los usuarios') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('usuarios.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.usuarios.create') }}" wire:navigate>
+                    {{ __('Nuevo Usuario') }}
+                </flux:button>
+            @endcan
+        </div>
     </div>
 
-    {{-- Formulario Crear/Editar (Modal-like panel) --}}
-    @if($showForm)
-        @can('usuarios.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 shadow-sm">
-                <div class="flex items-center justify-between mb-4">
-                    <flux:heading size="lg">{{ $usuario_id ? __('Editar Usuario') : __('Nuevo Usuario') }}</flux:heading>
-                    <flux:button variant="ghost" icon="x-mark" size="sm" wire:click="limpiarForm" />
-                </div>
-
-                <form wire:submit.prevent="guardar" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <flux:field>
-                        <flux:label>{{ __('Nombre completo') }}</flux:label>
-                        <flux:input wire:model="nombre" placeholder="Ej. Juan Pérez" required />
-                        <flux:error name="nombre" />
-                    </flux:field>
-
-                    <flux:field>
-                        <flux:label>{{ __('Correo electrónico') }}</flux:label>
-                        <flux:input wire:model="email" type="email" placeholder="usuario@logan.com" required />
-                        <flux:error name="email" />
-                    </flux:field>
-
-                    @if(!$usuario_id)
-                        <flux:field>
-                            <flux:label>{{ __('Contraseña') }}</flux:label>
-                            <flux:input wire:model="password" type="password" placeholder="Mínimo 8 caracteres" required />
-                            <flux:error name="password" />
-                        </flux:field>
-
-                        <flux:field>
-                            <flux:label>{{ __('Confirmar contraseña') }}</flux:label>
-                            <flux:input wire:model="password_confirmation" type="password" placeholder="Repite la contraseña" required />
-                        </flux:field>
-                    @endif
-
-                    <flux:field class="md:col-span-{{ $usuario_id ? '1' : '1' }}">
-                        <flux:label>{{ __('Rol') }}</flux:label>
-                        <flux:select wire:model="rol" placeholder="Selecciona un rol">
-                            @foreach($this->roles as $r)
-                                <option value="{{ $r->name }}">{{ ucfirst($r->name) }}</option>
-                            @endforeach
-                        </flux:select>
-                        <flux:error name="rol" />
-                    </flux:field>
-
-                    <flux:field>
-                        <flux:label>{{ __('Estado') }}</flux:label>
-                        <div class="flex items-center gap-3 h-10">
-                            <flux:switch wire:model="activo" />
-                            <span class="text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ $activo ? __('Usuario activo') : __('Usuario inactivo') }}
-                            </span>
-                        </div>
-                    </flux:field>
-
-                    <div class="md:col-span-2 flex justify-end gap-3 pt-2">
-                        <flux:button variant="ghost" wire:click="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        <flux:button variant="primary" type="submit" icon="check">
-                            {{ $usuario_id ? __('Actualizar') : __('Crear Usuario') }}
-                        </flux:button>
-                    </div>
-                </form>
-            </div>
-        @endcan
-    @endif
-
     {{-- Filtros --}}
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm">
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row gap-3">
             <div class="flex-1">
                 <flux:input
@@ -327,16 +263,33 @@ new #[Title('Gestión de Usuarios')] class extends Component {
                 @endforeach
             </flux:select>
             <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
                 <option value="activos">{{ __('Activos') }}</option>
-                <option value="eliminados">{{ __('Desactivados') }}</option>
-                <option value="todos">{{ __('Todos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
             </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button variant="ghost" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
         </div>
     </div>
 
     {{-- Tabla --}}
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
@@ -408,7 +361,8 @@ new #[Title('Gestión de Usuarios')] class extends Component {
                                                 variant="ghost"
                                                 icon="pencil-square"
                                                 size="sm"
-                                                wire:click="editar({{ $usuario->id }})"
+                                                href="{{ route('admin.usuarios.edit', $usuario->id) }}"
+                                                wire:navigate
                                                 title="{{ __('Editar') }}"
                                             />
                                             @if($usuario->id !== auth()->id())
@@ -447,9 +401,38 @@ new #[Title('Gestión de Usuarios')] class extends Component {
                 </tbody>
             </table>
         </div>
-        <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-400">
-            {{ $this->usuarios->count() }} {{ __('usuario(s) encontrado(s)') }}
-        </div>
+        
+        @if($this->usuarios->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->usuarios->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->usuarios->total() }} {{ __('usuario(s) encontrado(s)') }}</span>
+                @if($this->usuarios->total() > 0)
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+                @endif
+            </div>
+        @endif
     </div>
 
     {{-- Modal Cambiar Contraseña --}}
