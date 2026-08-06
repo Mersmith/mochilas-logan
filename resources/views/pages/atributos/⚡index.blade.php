@@ -22,7 +22,7 @@ new #[Title('Gestión de Atributos')] class extends Component {
 
     public function guardarAtributo(): void
     {
-        if (!auth()->user()->hasPermissionTo('atributos.editar')) {
+        if (!auth()->user()->can('atributos.editar')) {
             abort(403, 'No tienes permiso para editar atributos.');
         }
 
@@ -55,7 +55,7 @@ new #[Title('Gestión de Atributos')] class extends Component {
 
     public function eliminarAtributo(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('atributos.editar')) {
+        if (!auth()->user()->can('atributos.editar')) {
             abort(403, 'No tienes permiso para eliminar atributos.');
         }
 
@@ -88,7 +88,7 @@ new #[Title('Gestión de Atributos')] class extends Component {
 
     public function guardarValor(): void
     {
-        if (!auth()->user()->hasPermissionTo('atributos.editar')) {
+        if (!auth()->user()->can('atributos.editar')) {
             abort(403, 'No tienes permiso para editar atributos.');
         }
 
@@ -126,7 +126,7 @@ new #[Title('Gestión de Atributos')] class extends Component {
 
     public function eliminarValor(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('atributos.editar')) {
+        if (!auth()->user()->can('atributos.editar')) {
             abort(403, 'No tienes permiso para eliminar atributos.');
         }
 

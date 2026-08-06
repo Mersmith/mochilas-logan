@@ -12,23 +12,23 @@ Route::get('dashboard', function () {
     if (auth()->check()) {
         $user = auth()->user();
 
-        if ($user->hasPermissionTo('dashboard.ver')) {
+        if ($user->can('dashboard.ver')) {
             return redirect()->route('admin.dashboard');
         }
 
-        if ($user->hasPermissionTo('ventas.ver')) {
+        if ($user->can('ventas.ver')) {
             return redirect()->route('admin.ventas.index');
         }
 
-        if ($user->hasPermissionTo('guias.ver')) {
+        if ($user->can('guias.ver')) {
             return redirect()->route('admin.guias.index');
         }
 
-        if ($user->hasPermissionTo('productos.ver')) {
+        if ($user->can('productos.ver')) {
             return redirect()->route('admin.productos.index');
         }
 
-        if ($user->hasPermissionTo('panel.acceder')) {
+        if ($user->can('panel.acceder')) {
             return redirect()->route('admin.dashboard'); // Fallback in case of weird permissions
         }
 

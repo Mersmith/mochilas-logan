@@ -24,7 +24,7 @@ new #[Title('Gestión de Descuentos')] class extends Component {
 
     public function guardarDescuento(): void
     {
-        if (!auth()->user()->hasPermissionTo('descuentos.editar')) {
+        if (!auth()->user()->can('descuentos.editar')) {
             abort(403, 'No tienes permiso para editar descuentos.');
         }
 
@@ -74,7 +74,7 @@ new #[Title('Gestión de Descuentos')] class extends Component {
 
     public function eliminarDescuento(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('descuentos.editar')) {
+        if (!auth()->user()->can('descuentos.editar')) {
             abort(403, 'No tienes permiso para eliminar descuentos.');
         }
 
@@ -107,7 +107,7 @@ new #[Title('Gestión de Descuentos')] class extends Component {
 
     public function agregarProducto(): void
     {
-        if (!auth()->user()->hasPermissionTo('descuentos.editar')) {
+        if (!auth()->user()->can('descuentos.editar')) {
             abort(403, 'No tienes permiso para editar descuentos.');
         }
 
@@ -136,7 +136,7 @@ new #[Title('Gestión de Descuentos')] class extends Component {
 
     public function quitarProducto(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('descuentos.editar')) {
+        if (!auth()->user()->can('descuentos.editar')) {
             abort(403, 'No tienes permiso para editar descuentos.');
         }
 

@@ -22,7 +22,7 @@ new #[Title('Nuevo Usuario')] class extends Component {
 
     public function guardar()
     {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
+        if (! auth()->user()->can('usuarios.editar')) {
             abort(403);
         }
 

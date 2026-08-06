@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
 
             // 1. Organización
-            SedeSeeder::class,
+            /*SedeSeeder::class,
             AlmacenSeeder::class,
 
             // 2. Catálogos base
@@ -39,7 +39,7 @@ class DatabaseSeeder extends Seeder
             ProductoSeeder::class,
 
             // 6. Transacciones iniciales
-            GuiaInventarioSeeder::class,
+            GuiaInventarioSeeder::class,*/
         ]);
     }
 }

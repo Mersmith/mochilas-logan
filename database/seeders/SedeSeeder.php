@@ -15,6 +15,8 @@ class SedeSeeder extends Seeder
             [
                 'direccion' => 'Av. Javier Prado 1234, San Isidro',
                 'activo' => true,
+                'created_by' => 1,
+                'updated_by' => 1,
             ]
         );
 
@@ -23,6 +25,8 @@ class SedeSeeder extends Seeder
             [
                 'direccion' => 'Av. Alfredo Mendiola 4567, Los Olivos',
                 'activo' => true,
+                'created_by' => 1,
+                'updated_by' => 1,
             ]
         );
     }

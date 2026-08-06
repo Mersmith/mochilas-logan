@@ -1,182 +1,324 @@
 <?php
 
 use App\Models\Sede;
+use App\Exports\SedesExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
 new #[Title('Gestión de Sedes')] class extends Component {
-    public ?int $sede_id = null;
-    public string $nombre = '';
-    public string $direccion = '';
-    public bool $activo = true;
+    use WithPagination;
+
+    // ── Filtros ──────────────────────────────────────────
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos'; // activos | desactivados | todos
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos'; // admitidos | eliminados | todos
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
 
     /**
-     * Save Sede (Create or Update).
+     * Resetea la paginación cuando cambia algún filtro
      */
-    public function guardar(): void
+    public function updating($property)
     {
-        // Require sedes.editar or sedes.crear depending on the action, or just sedes.editar.
-        // If they can see the page (sedes.ver), they might not be able to edit.
-        if (!auth()->user()->hasPermissionTo('sedes.editar')) {
-            abort(403, 'No tienes permiso para editar sedes.');
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
-
-        $this->validate([
-            'nombre' => 'required|string|max:255',
-            'direccion' => 'nullable|string|max:255',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->sede_id) {
-            $sede = Sede::findOrFail($this->sede_id);
-            $sede->update([
-                'nombre' => $this->nombre,
-                'direccion' => $this->direccion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Sede actualizada.'));
-        } else {
-            Sede::create([
-                'nombre' => $this->nombre,
-                'direccion' => $this->direccion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Sede registrada con éxito.'));
-        }
-
-        $this->limpiarForm();
     }
 
-    public function editar(int $id): void
+    public function resetFiltros()
     {
-        $sede = Sede::findOrFail($id);
-        $this->sede_id = $sede->id;
-        $this->nombre = $sede->nombre;
-        $this->direccion = $sede->direccion ?? '';
-        $this->activo = $sede->activo;
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+
+    /**
+     * Devuelve el query builder base con los filtros aplicados.
+     */
+    protected function getBaseQuery()
+    {
+        $query = Sede::withCount(['almacenes', 'series'])
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        // Filtro de estado de cuenta (Activo / Inactivo)
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        // Filtro de papelera (Soft Deletes)
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        } // Si es 'admitidos', no se aplica nada (usa el default de sin trashed)
+
+        // Filtro de Fechas
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    #[Computed]
+    public function sedes()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
     }
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('sedes.editar')) {
+        if (!auth()->user()->can('sedes.editar')) {
             abort(403, 'No tienes permiso para eliminar sedes.');
         }
 
-        $sede = Sede::findOrFail($id);
-        
+        $sede = Sede::withTrashed()->findOrFail($id);
+
         // Prevent deletion if it has relations like almacenes or series
         if ($sede->almacenes()->count() > 0 || $sede->series()->count() > 0) {
             Flux::toast(variant: 'danger', text: __('No se puede eliminar la sede porque tiene almacenes o series asignados.'));
             return;
         }
 
-        $sede->delete();
-        Flux::toast(variant: 'success', text: __('Sede eliminada.'));
+        if ($sede->trashed()) {
+            $sede->forceDelete();
+            Flux::toast(variant: 'success', text: __('Sede eliminada permanentemente.'));
+        } else {
+            $sede->delete();
+            Flux::toast(variant: 'success', text: __('Sede enviada a la papelera (soft delete).'));
+        }
     }
 
-    public function limpiarForm(): void
+    public function restaurar(int $id): void
     {
-        $this->sede_id = null;
-        $this->nombre = '';
-        $this->direccion = '';
-        $this->activo = true;
+        if (!auth()->user()->can('sedes.editar')) {
+            abort(403, 'No tienes permiso para restaurar sedes.');
+        }
+
+        $sede = Sede::withTrashed()->findOrFail($id);
+        $sede->restore();
+
+        Flux::toast(variant: 'success', text: __('Sede restaurada correctamente.'));
     }
 
-    #[Computed]
-    public function sedes()
+    // ── Exportaciones ──────────────────────────────────────────
+
+    public function exportarTodos()
     {
-        return Sede::withCount(['almacenes', 'series'])->orderBy('nombre', 'asc')->get();
+        $query = Sede::withCount(['almacenes', 'series'])->orderBy('nombre', 'asc');
+        return Excel::download(new SedesExport($query), 'todas_las_sedes.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->getBaseQuery();
+        return Excel::download(new SedesExport($query), 'sedes_filtradas.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Gestión de Sedes') }}</flux:heading>
-            <flux:subheading>{{ __('Administra las sedes físicas o sucursales de la empresa.') }}</flux:subheading>
+            <flux:subheading>{{ __('Administra las sedes físicas de la empresa.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button variant="subtle" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todas las sedes') }}
+                    </flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}
+                    </flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('sedes.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.sedes.create') }}" wire:navigate>
+                    {{ __('Nueva Sede') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Formulario (Solo visible si tiene permiso para editar) -->
-        @can('sedes.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $sede_id ? __('Editar Sede') : __('Nueva Sede') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model="nombre" :label="__('Nombre de la Sede')" placeholder="Ej. Sede Principal" required />
-
-                    <flux:input wire:model="direccion" :label="__('Dirección')" placeholder="Av. Principal 123..." />
-
-                    <flux:checkbox wire:model="activo" :label="__('Sede activa')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($sede_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $sede_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div
+        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass"
+                    placeholder="{{ __('Buscar por nombre de sede...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <!-- Tabla -->
-        <div class="{{ auth()->user()->can('sedes.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Sedes Registradas') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3">{{ __('Dirección') }}</th>
-                            <th class="p-3 text-center">{{ __('Almacenes') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button variant="ghost" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div
+        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr
+                        class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3">{{ __('Dirección') }}</th>
+                        <th class="p-3 text-center">{{ __('Almacenes') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        @can('sedes.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->sedes as $sede)
+                        <tr
+                            class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $sede->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $sede->nombre }}
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $sede->direccion ?: '-' }}
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $sede->almacenes_count }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($sede->trashed())
+                                    <flux:badge color="red">{{ __('Eliminada') }}</flux:badge>
+                                @elseif($sede->activo)
+                                    <flux:badge color="success">{{ __('Activo') }}</flux:badge>
+                                @else
+                                    <flux:badge color="zinc">{{ __('Desactivado') }}</flux:badge>
+                                @endif
+                            </td>
                             @can('sedes.editar')
-                                <th class="p-3"></th>
-                            @endcan
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->sedes as $sede)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">
-                                    {{ $sede->nombre }}
-                                </td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">
-                                    {{ $sede->direccion ?: '-' }}
-                                </td>
-                                <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
-                                    {{ $sede->almacenes_count }}
-                                </td>
-                                <td class="p-3 text-center">
-                                    @if($sede->activo)
-                                        <flux:badge color="success">{{ __('Activa') }}</flux:badge>
+                                <td class="p-3 text-right space-x-2">
+                                    @if($sede->trashed())
+                                        <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                            wire:click.prevent="restaurar({{ $sede->id }})"
+                                            wire:confirm="¿Está seguro de restaurar esta sede?" />
+                                        <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                            wire:click.prevent="confirmarEliminacion({{ $sede->id }}, true)" />
                                     @else
-                                        <flux:badge color="zinc">{{ __('Inactiva') }}</flux:badge>
+                                        <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                            href="{{ route('admin.sedes.edit', $sede->id) }}" wire:navigate />
+                                        <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                            wire:click.prevent="confirmarEliminacion({{ $sede->id }})" />
                                     @endif
                                 </td>
-                                @can('sedes.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $sede->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $sede->id }})" wire:confirm="¿Está seguro de eliminar esta sede?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('sedes.editar') ? 5 : 4 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay sedes registradas.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                            @endcan
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('sedes.editar') ? 5 : 4 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay sedes registradas que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+
+        @if($this->sedes->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->sedes->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div
+                class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->sedes->total() }} {{ __('sede(s) encontrada(s)') }}</span>
+                @if($this->sedes->total() > 0)
+                    <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                        <span>{{ __('Mostrar') }}</span>
+                        <flux:select wire:model.live="perPage" class="w-20">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </flux:select>
+                    </div>
+                @endif
+            </div>
+        @endif
     </div>
+
+    <!-- Modals de confirmación -->
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

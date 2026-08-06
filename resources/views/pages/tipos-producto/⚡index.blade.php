@@ -21,7 +21,7 @@ new #[Title('Gestión de Tipos de Producto')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('tipos-producto.editar')) {
+        if (!auth()->user()->can('tipos-producto.editar')) {
             abort(403, 'No tienes permiso para editar tipos de producto.');
         }
 
@@ -62,7 +62,7 @@ new #[Title('Gestión de Tipos de Producto')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('tipos-producto.editar')) {
+        if (!auth()->user()->can('tipos-producto.editar')) {
             abort(403, 'No tienes permiso para eliminar tipos de producto.');
         }
 

@@ -13,7 +13,7 @@ new #[Title('Gestión de Listas de Precios')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('lista-precios.editar')) {
+        if (!auth()->user()->can('lista-precios.editar')) {
             abort(403, 'No tienes permiso para editar listas de precios.');
         }
 
@@ -50,7 +50,7 @@ new #[Title('Gestión de Listas de Precios')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('lista-precios.editar')) {
+        if (!auth()->user()->can('lista-precios.editar')) {
             abort(403, 'No tienes permiso para eliminar listas de precios.');
         }
 

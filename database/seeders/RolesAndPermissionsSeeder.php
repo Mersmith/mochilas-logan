@@ -73,6 +73,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'lista-precios.editar',
             // Sedes
             'sedes.ver',
+            'sedes.crear',
             'sedes.editar',
 
             // Seguridad (Roles y Permisos)

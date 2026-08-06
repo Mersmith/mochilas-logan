@@ -31,7 +31,7 @@ new #[Title('Gestión de Series')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('series.editar')) {
+        if (!auth()->user()->can('series.editar')) {
             abort(403, 'No tienes permiso para editar series.');
         }
 
@@ -80,7 +80,7 @@ new #[Title('Gestión de Series')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('series.editar')) {
+        if (!auth()->user()->can('series.editar')) {
             abort(403, 'No tienes permiso para eliminar series.');
         }
 

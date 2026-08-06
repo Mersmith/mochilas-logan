@@ -25,7 +25,7 @@ new #[Title('Gestión de Categorías')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('categorias.editar')) {
+        if (!auth()->user()->can('categorias.editar')) {
             abort(403, 'No tienes permiso para editar categorías.');
         }
 
@@ -88,7 +88,7 @@ new #[Title('Gestión de Categorías')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('categorias.editar')) {
+        if (!auth()->user()->can('categorias.editar')) {
             abort(403, 'No tienes permiso para eliminar categorías.');
         }
 

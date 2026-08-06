@@ -110,7 +110,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
      */
     public function eliminar(int $id): void
     {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
+        if (! auth()->user()->can('usuarios.editar')) {
             abort(403);
         }
 
@@ -134,7 +134,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
      */
     public function toggleActivo(int $id): void
     {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
+        if (! auth()->user()->can('usuarios.editar')) {
             abort(403);
         }
 
@@ -161,7 +161,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
      */
     public function restaurar(int $id): void
     {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
+        if (! auth()->user()->can('usuarios.editar')) {
             abort(403);
         }
 
@@ -185,7 +185,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
      */
     public function cambiarPassword(): void
     {
-        if (! auth()->user()->hasPermissionTo('usuarios.editar')) {
+        if (! auth()->user()->can('usuarios.editar')) {
             abort(403);
         }
 

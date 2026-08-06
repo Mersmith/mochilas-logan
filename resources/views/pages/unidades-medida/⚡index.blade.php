@@ -13,7 +13,7 @@ new #[Title('Gestión de Unidades de Medida')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('unidades-medida.editar')) {
+        if (!auth()->user()->can('unidades-medida.editar')) {
             abort(403, 'No tienes permiso para editar unidades de medida.');
         }
 
@@ -50,7 +50,7 @@ new #[Title('Gestión de Unidades de Medida')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('unidades-medida.editar')) {
+        if (!auth()->user()->can('unidades-medida.editar')) {
             abort(403, 'No tienes permiso para eliminar unidades de medida.');
         }
 

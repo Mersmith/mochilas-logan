@@ -24,7 +24,7 @@ new #[Title('Gestión de Almacenes')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('almacenes.editar')) {
+        if (!auth()->user()->can('almacenes.editar')) {
             abort(403, 'No tienes permiso para editar almacenes.');
         }
 
@@ -69,7 +69,7 @@ new #[Title('Gestión de Almacenes')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('almacenes.editar')) {
+        if (!auth()->user()->can('almacenes.editar')) {
             abort(403, 'No tienes permiso para eliminar almacenes.');
         }
 

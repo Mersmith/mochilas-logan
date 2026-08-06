@@ -14,7 +14,7 @@ new #[Title('Gestión de Tipos de Documento')] class extends Component {
 
     public function guardar(): void
     {
-        if (!auth()->user()->hasPermissionTo('tipos-documento.editar')) {
+        if (!auth()->user()->can('tipos-documento.editar')) {
             abort(403, 'No tienes permiso para editar tipos de documento.');
         }
 
@@ -55,7 +55,7 @@ new #[Title('Gestión de Tipos de Documento')] class extends Component {
 
     public function eliminar(int $id): void
     {
-        if (!auth()->user()->hasPermissionTo('tipos-documento.editar')) {
+        if (!auth()->user()->can('tipos-documento.editar')) {
             abort(403, 'No tienes permiso para eliminar tipos de documento.');
         }
 
