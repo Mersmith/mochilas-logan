@@ -18,109 +18,116 @@
                         </flux:sidebar.item>
                     @endcan
 
-                    @can('productos.ver')
-                        <flux:sidebar.item icon="tag" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.index*') || request()->routeIs('admin.productos.manage*') || request()->routeIs('admin.productos.create*')" wire:navigate>
-                            {{ __('Productos') }}
-                        </flux:sidebar.item>
-                    @endcan
+                    <!-- Logística -->
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.productos.*') || request()->routeIs('admin.guias.*') || request()->routeIs('admin.kardex.*')" :heading="__('Logística')" icon="truck">
+                        @can('productos.ver')
+                            <flux:sidebar.item icon="cube" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.index*') || request()->routeIs('admin.productos.manage*') || request()->routeIs('admin.productos.create*')" wire:navigate>
+                                {{ __('Productos') }}
+                            </flux:sidebar.item>
+                        @endcan
 
-                    @can('guias.ver')
-                        <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.guias.index')" :current="request()->routeIs('admin.guias.index*')" wire:navigate>
-                            {{ __('Guías de Inventario') }}
-                        </flux:sidebar.item>
-                    @endcan
+                        @can('guias.ver')
+                            <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.guias.index')" :current="request()->routeIs('admin.guias.index*')" wire:navigate>
+                                {{ __('Guías de Inventario') }}
+                            </flux:sidebar.item>
+                        @endcan
 
-                    @can('kardex.ver')
-                        <flux:sidebar.item icon="chart-bar" :href="route('admin.kardex.index')" :current="request()->routeIs('admin.kardex.index*')" wire:navigate>
-                            {{ __('Kardex Valorizado') }}
-                        </flux:sidebar.item>
-                    @endcan
+                        @can('kardex.ver')
+                            <flux:sidebar.item icon="chart-bar" :href="route('admin.kardex.index')" :current="request()->routeIs('admin.kardex.index*')" wire:navigate>
+                                {{ __('Kardex Valorizado') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
 
-                    @can('ventas.ver')
-                        <flux:sidebar.item icon="shopping-cart" :href="route('admin.ventas.index')" :current="request()->routeIs('admin.ventas.index*') || request()->routeIs('admin.ventas.create*')" wire:navigate>
-                            {{ __('Ventas / POS') }}
-                        </flux:sidebar.item>
-                    @endcan
+                    <!-- Punto de Venta -->
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.ventas.*') || request()->routeIs('admin.promociones.*') || request()->routeIs('admin.descuentos.*')" :heading="__('Punto de Venta')" icon="shopping-bag">
+                        @can('ventas.ver')
+                            <flux:sidebar.item icon="shopping-cart" :href="route('admin.ventas.index')" :current="request()->routeIs('admin.ventas.index*') || request()->routeIs('admin.ventas.create*')" wire:navigate>
+                                {{ __('Ventas / POS') }}
+                            </flux:sidebar.item>
+                        @endcan
 
-                    @can('promociones.ver')
-                        <flux:sidebar.item icon="ticket" :href="route('admin.promociones.index')" :current="request()->routeIs('admin.promociones.index*')" wire:navigate>
-                            {{ __('Promociones / Cupones') }}
-                        </flux:sidebar.item>
-                    @endcan
+                        @can('promociones.ver')
+                            <flux:sidebar.item icon="ticket" :href="route('admin.promociones.index')" :current="request()->routeIs('admin.promociones.index*')" wire:navigate>
+                                {{ __('Promociones / Cupones') }}
+                            </flux:sidebar.item>
+                        @endcan
 
-                    @can('descuentos.ver')
-                        <flux:sidebar.item icon="receipt-percent" :href="route('admin.descuentos.index')" :current="request()->routeIs('admin.descuentos.index*')" wire:navigate>
-                            {{ __('Descuentos de Productos') }}
-                        </flux:sidebar.item>
-                    @endcan
+                        @can('descuentos.ver')
+                            <flux:sidebar.item icon="receipt-percent" :href="route('admin.descuentos.index')" :current="request()->routeIs('admin.descuentos.index*')" wire:navigate>
+                                {{ __('Descuentos') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
                 </flux:sidebar.group>
 
                 <flux:sidebar.group :heading="__('Mantenimiento')" class="grid">
-                    @can('sedes.ver')
-                        <flux:sidebar.item icon="building-office-2" :href="route('admin.sedes.index')" :current="request()->routeIs('admin.sedes.index*')" wire:navigate>
-                            {{ __('Sedes') }}
-                        </flux:sidebar.item>
-                    @endcan
+                    <!-- 1. Organización -->
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.sedes.*') || request()->routeIs('admin.almacenes.*')" :heading="__('Organización')" icon="building-office">
+                        @can('sedes.ver')
+                            <flux:sidebar.item icon="building-office-2" :href="route('admin.sedes.index')" :current="request()->routeIs('admin.sedes.index*')" wire:navigate>
+                                {{ __('Sedes') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('almacenes.ver')
+                            <flux:sidebar.item icon="building-storefront" :href="route('admin.almacenes.index')" :current="request()->routeIs('admin.almacenes.index*')" wire:navigate>
+                                {{ __('Almacenes') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
 
-                    @can('almacenes.ver')
-                        <flux:sidebar.item icon="building-storefront" :href="route('admin.almacenes.index')" :current="request()->routeIs('admin.almacenes.index*')" wire:navigate>
-                            {{ __('Almacenes') }}
-                        </flux:sidebar.item>
-                    @endcan
+                    <!-- 2. Clasificación -->
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.tipos-producto.*') || request()->routeIs('admin.categorias.*') || request()->routeIs('admin.marcas.*') || request()->routeIs('admin.atributos.*') || request()->routeIs('admin.unidades-medida.*')" :heading="__('Clasificación')" icon="tag">
+                        @can('tipos-producto.ver')
+                            <flux:sidebar.item icon="rectangle-group" :href="route('admin.tipos-producto.index')" :current="request()->routeIs('admin.tipos-producto.index*')" wire:navigate>
+                                {{ __('Tipos de Producto') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('categorias.ver')
+                            <flux:sidebar.item icon="squares-2x2" :href="route('admin.categorias.index')" :current="request()->routeIs('admin.categorias.index*')" wire:navigate>
+                                {{ __('Categorías') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('marcas.ver')
+                            <flux:sidebar.item icon="bookmark" :href="route('admin.marcas.index')" :current="request()->routeIs('admin.marcas.index*')" wire:navigate>
+                                {{ __('Marcas') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('atributos.ver')
+                            <flux:sidebar.item icon="swatch" :href="route('admin.atributos.index')" :current="request()->routeIs('admin.atributos.index*')" wire:navigate>
+                                {{ __('Atributos') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('unidades-medida.ver')
+                            <flux:sidebar.item icon="scale" :href="route('admin.unidades-medida.index')" :current="request()->routeIs('admin.unidades-medida.index*')" wire:navigate>
+                                {{ __('Unidades de Medida') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
 
-                    @can('proveedores.ver')
-                        <flux:sidebar.item icon="truck" :href="route('admin.proveedores.index')" :current="request()->routeIs('admin.proveedores.index*')" wire:navigate>
-                            {{ __('Proveedores') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('tipos-producto.ver')
-                        <flux:sidebar.item icon="rectangle-group" :href="route('admin.tipos-producto.index')" :current="request()->routeIs('admin.tipos-producto.index*')" wire:navigate>
-                            {{ __('Tipos de Producto') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('marcas.ver')
-                        <flux:sidebar.item icon="tag" :href="route('admin.marcas.index')" :current="request()->routeIs('admin.marcas.index*')" wire:navigate>
-                            {{ __('Marcas') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('categorias.ver')
-                        <flux:sidebar.item icon="squares-2x2" :href="route('admin.categorias.index')" :current="request()->routeIs('admin.categorias.index*')" wire:navigate>
-                            {{ __('Categorías') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('atributos.ver')
-                        <flux:sidebar.item icon="swatch" :href="route('admin.atributos.index')" :current="request()->routeIs('admin.atributos.index*')" wire:navigate>
-                            {{ __('Atributos') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('unidades-medida.ver')
-                        <flux:sidebar.item icon="scale" :href="route('admin.unidades-medida.index')" :current="request()->routeIs('admin.unidades-medida.index*')" wire:navigate>
-                            {{ __('Unidades de Medida') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('lista-precios.ver')
-                        <flux:sidebar.item icon="currency-dollar" :href="route('admin.lista-precios.index')" :current="request()->routeIs('admin.lista-precios.index*')" wire:navigate>
-                            {{ __('Listas de Precios') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('tipos-documento.ver')
-                        <flux:sidebar.item icon="document-text" :href="route('admin.tipos-documento.index')" :current="request()->routeIs('admin.tipos-documento.index*')" wire:navigate>
-                            {{ __('Tipos Documento') }}
-                        </flux:sidebar.item>
-                    @endcan
-
-                    @can('series.ver')
-                        <flux:sidebar.item icon="hashtag" :href="route('admin.series.index')" :current="request()->routeIs('admin.series.index*')" wire:navigate>
-                            {{ __('Series Comprobante') }}
-                        </flux:sidebar.item>
-                    @endcan
+                    <!-- 3. Comercial y Documentos -->
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.proveedores.*') || request()->routeIs('admin.lista-precios.*') || request()->routeIs('admin.tipos-documento.*') || request()->routeIs('admin.series.*')" :heading="__('Comercial y Doc.')" icon="document-text">
+                        @can('proveedores.ver')
+                            <flux:sidebar.item icon="truck" :href="route('admin.proveedores.index')" :current="request()->routeIs('admin.proveedores.index*')" wire:navigate>
+                                {{ __('Proveedores') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('lista-precios.ver')
+                            <flux:sidebar.item icon="currency-dollar" :href="route('admin.lista-precios.index')" :current="request()->routeIs('admin.lista-precios.index*')" wire:navigate>
+                                {{ __('Listas de Precios') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('tipos-documento.ver')
+                            <flux:sidebar.item icon="document-text" :href="route('admin.tipos-documento.index')" :current="request()->routeIs('admin.tipos-documento.index*')" wire:navigate>
+                                {{ __('Tipos Documento') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('series.ver')
+                            <flux:sidebar.item icon="hashtag" :href="route('admin.series.index')" :current="request()->routeIs('admin.series.index*')" wire:navigate>
+                                {{ __('Series Comprobante') }}
+                            </flux:sidebar.item>
+                        @endcan
+                    </flux:sidebar.group>
                 </flux:sidebar.group>
                 @if(auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
                     <flux:sidebar.group :heading="__('Seguridad')" class="grid">
