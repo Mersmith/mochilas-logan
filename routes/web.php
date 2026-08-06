@@ -74,6 +74,14 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
             ->name('tipos-producto.index')
             ->middleware('permission:tipos-producto.ver');
 
+        Route::livewire('marcas', 'pages::marcas.index')
+            ->name('marcas.index')
+            ->middleware('permission:marcas.ver');
+
+        Route::livewire('categorias', 'pages::categorias.index')
+            ->name('categorias.index')
+            ->middleware('permission:categorias.ver');
+
         Route::livewire('proveedores', 'pages::proveedores.index')
             ->name('proveedores.index')
             ->middleware('permission:proveedores.ver');

@@ -59,6 +59,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'tipos-producto.editar',
             'proveedores.ver',
             'proveedores.editar',
+            'marcas.ver',
+            'marcas.editar',
+            'categorias.ver',
+            'categorias.editar',
             // Sedes
             'sedes.ver',
             'sedes.editar',

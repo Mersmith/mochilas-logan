@@ -74,6 +74,18 @@
                         </flux:sidebar.item>
                     @endcan
 
+                    @can('marcas.ver')
+                        <flux:sidebar.item icon="tag" :href="route('admin.marcas.index')" :current="request()->routeIs('admin.marcas.index*')" wire:navigate>
+                            {{ __('Marcas') }}
+                        </flux:sidebar.item>
+                    @endcan
+
+                    @can('categorias.ver')
+                        <flux:sidebar.item icon="squares-2x2" :href="route('admin.categorias.index')" :current="request()->routeIs('admin.categorias.index*')" wire:navigate>
+                            {{ __('Categorías') }}
+                        </flux:sidebar.item>
+                    @endcan
+
                     @can('tipos-documento.ver')
                         <flux:sidebar.item icon="document-text" :href="route('admin.tipos-documento.index')" :current="request()->routeIs('admin.tipos-documento.index*')" wire:navigate>
                             {{ __('Tipos Documento') }}
