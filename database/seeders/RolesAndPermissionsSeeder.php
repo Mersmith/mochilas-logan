@@ -44,9 +44,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.ver',
             'ventas.crear',
 
-            // Promociones y Cupones
+            // Promociones y Descuentos
             'promociones.ver',
             'promociones.crear',
+            'descuentos.ver',
+            'descuentos.editar',
 
             // Módulos de Mantenimiento / Configuración Base
             'almacenes.ver',

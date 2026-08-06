@@ -54,6 +54,10 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
             ->name('promociones.index')
             ->middleware('permission:promociones.ver');
 
+        Route::livewire('descuentos', 'pages::descuentos.index')
+            ->name('descuentos.index')
+            ->middleware('permission:descuentos.ver');
+
         // =============================================
         // MÓDULOS DE CONFIGURACIÓN Y MANTENIMIENTO
         // =============================================

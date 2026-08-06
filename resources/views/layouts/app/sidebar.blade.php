@@ -47,6 +47,12 @@
                             {{ __('Promociones / Cupones') }}
                         </flux:sidebar.item>
                     @endcan
+
+                    @can('descuentos.ver')
+                        <flux:sidebar.item icon="receipt-percent" :href="route('admin.descuentos.index')" :current="request()->routeIs('admin.descuentos.index*')" wire:navigate>
+                            {{ __('Descuentos de Productos') }}
+                        </flux:sidebar.item>
+                    @endcan
                 </flux:sidebar.group>
 
                 <flux:sidebar.group :heading="__('Mantenimiento')" class="grid">
