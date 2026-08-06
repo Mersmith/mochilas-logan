@@ -65,6 +65,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'categorias.editar',
             'atributos.ver',
             'atributos.editar',
+            'unidades-medida.ver',
+            'unidades-medida.editar',
+            'lista-precios.ver',
+            'lista-precios.editar',
             // Sedes
             'sedes.ver',
             'sedes.editar',

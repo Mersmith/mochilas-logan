@@ -92,6 +92,18 @@
                         </flux:sidebar.item>
                     @endcan
 
+                    @can('unidades-medida.ver')
+                        <flux:sidebar.item icon="scale" :href="route('admin.unidades-medida.index')" :current="request()->routeIs('admin.unidades-medida.index*')" wire:navigate>
+                            {{ __('Unidades de Medida') }}
+                        </flux:sidebar.item>
+                    @endcan
+
+                    @can('lista-precios.ver')
+                        <flux:sidebar.item icon="currency-dollar" :href="route('admin.lista-precios.index')" :current="request()->routeIs('admin.lista-precios.index*')" wire:navigate>
+                            {{ __('Listas de Precios') }}
+                        </flux:sidebar.item>
+                    @endcan
+
                     @can('tipos-documento.ver')
                         <flux:sidebar.item icon="document-text" :href="route('admin.tipos-documento.index')" :current="request()->routeIs('admin.tipos-documento.index*')" wire:navigate>
                             {{ __('Tipos Documento') }}

@@ -86,6 +86,14 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
             ->name('atributos.index')
             ->middleware('permission:atributos.ver');
 
+        Route::livewire('unidades-medida', 'pages::unidades-medida.index')
+            ->name('unidades-medida.index')
+            ->middleware('permission:unidades-medida.ver');
+
+        Route::livewire('lista-precios', 'pages::lista-precios.index')
+            ->name('lista-precios.index')
+            ->middleware('permission:lista-precios.ver');
+
         Route::livewire('proveedores', 'pages::proveedores.index')
             ->name('proveedores.index')
             ->middleware('permission:proveedores.ver');
