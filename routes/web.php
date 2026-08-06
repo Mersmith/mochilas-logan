@@ -82,6 +82,10 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
             ->name('categorias.index')
             ->middleware('permission:categorias.ver');
 
+        Route::livewire('atributos', 'pages::atributos.index')
+            ->name('atributos.index')
+            ->middleware('permission:atributos.ver');
+
         Route::livewire('proveedores', 'pages::proveedores.index')
             ->name('proveedores.index')
             ->middleware('permission:proveedores.ver');

@@ -86,6 +86,12 @@
                         </flux:sidebar.item>
                     @endcan
 
+                    @can('atributos.ver')
+                        <flux:sidebar.item icon="swatch" :href="route('admin.atributos.index')" :current="request()->routeIs('admin.atributos.index*')" wire:navigate>
+                            {{ __('Atributos') }}
+                        </flux:sidebar.item>
+                    @endcan
+
                     @can('tipos-documento.ver')
                         <flux:sidebar.item icon="document-text" :href="route('admin.tipos-documento.index')" :current="request()->routeIs('admin.tipos-documento.index*')" wire:navigate>
                             {{ __('Tipos Documento') }}

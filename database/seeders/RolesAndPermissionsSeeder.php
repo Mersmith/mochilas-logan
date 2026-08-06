@@ -63,6 +63,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'marcas.editar',
             'categorias.ver',
             'categorias.editar',
+            'atributos.ver',
+            'atributos.editar',
             // Sedes
             'sedes.ver',
             'sedes.editar',
