@@ -202,7 +202,7 @@ new #[Title('Gestión de Sedes')] class extends Component {
         </div>
 
         <div class="flex flex-col sm:flex-row items-end gap-3">
-            <div class="flex items-center gap-3 w-full sm:w-auto">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
                 <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
                 <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
             </div>
@@ -272,19 +272,21 @@ new #[Title('Gestión de Sedes')] class extends Component {
                                 @endif
                             </td>
                             @can('sedes.editar')
-                                <td class="p-3 text-right space-x-2">
-                                    @if($sede->trashed())
-                                        <flux:button variant="ghost" icon="arrow-path" size="sm"
-                                            wire:click.prevent="restaurar({{ $sede->id }})"
-                                            wire:confirm="¿Está seguro de restaurar esta sede?" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
-                                            wire:click.prevent="confirmarEliminacion({{ $sede->id }}, true)" />
-                                    @else
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm"
-                                            href="{{ route('admin.sedes.edit', $sede->id) }}" wire:navigate />
-                                        <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
-                                            wire:click.prevent="confirmarEliminacion({{ $sede->id }})" />
-                                    @endif
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($sede->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $sede->id }})"
+                                                wire:confirm="¿Está seguro de restaurar esta sede?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $sede->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.sedes.edit', $sede->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $sede->id }})" />
+                                        @endif
+                                    </div>
                                 </td>
                             @endcan
                         </tr>
