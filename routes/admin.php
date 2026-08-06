@@ -124,6 +124,10 @@ Route::middleware(['auth', 'verified', 'permission:panel.acceder'])
         // SEGURIDAD: Roles y Permisos (admin)
         // =============================================
 
+        Route::livewire('usuarios', 'pages::usuarios.index')
+            ->name('usuarios.index')
+            ->middleware('permission:usuarios.ver');
+
         Route::livewire('roles', 'pages::roles.index')
             ->name('roles.index')
             ->middleware('permission:roles.ver');

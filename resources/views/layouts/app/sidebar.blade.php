@@ -129,10 +129,16 @@
                         @endcan
                     </flux:sidebar.group>
                 </flux:sidebar.group>
-                @if(auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
+                @if(auth()->user()->can('usuarios.ver') || auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
                     <flux:sidebar.group :heading="__('Seguridad')" class="grid">
+                        @can('usuarios.ver')
+                            <flux:sidebar.item icon="user-group" :href="route('admin.usuarios.index')" :current="request()->routeIs('admin.usuarios.index*')" wire:navigate>
+                                {{ __('Usuarios') }}
+                            </flux:sidebar.item>
+                        @endcan
+
                         @can('roles.ver')
-                            <flux:sidebar.item icon="users" :href="route('admin.roles.index')" :current="request()->routeIs('admin.roles.index*')" wire:navigate>
+                            <flux:sidebar.item icon="shield-check" :href="route('admin.roles.index')" :current="request()->routeIs('admin.roles.index*')" wire:navigate>
                                 {{ __('Roles') }}
                             </flux:sidebar.item>
                         @endcan

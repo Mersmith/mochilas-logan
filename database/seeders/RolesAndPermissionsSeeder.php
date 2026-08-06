@@ -84,6 +84,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'permisos.crear',
             'permisos.editar',
             'permisos.eliminar',
+
+            // Gestión de Usuarios
+            'usuarios.ver',
+            'usuarios.editar',
         ];
 
         foreach ($permissions as $permission) {
