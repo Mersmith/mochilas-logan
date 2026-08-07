@@ -20,6 +20,11 @@ return new class extends Migration
             $table->string('slug')->unique();
             $table->text('descripcion')->nullable();
             $table->boolean('activo')->default(true);
+
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
             $table->softDeletes();
             $table->timestamps();
         });

@@ -24,7 +24,31 @@ class Producto extends Model implements HasMedia
         'slug',
         'descripcion',
         'activo',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($model) {
+            $model->created_by = auth()->id();
+            $model->updated_by = auth()->id();
+        });
+
+        static::updating(function ($model) {
+            $model->updated_by = auth()->id();
+        });
+
+        static::deleting(function ($model) {
+            if (in_array(SoftDeletes::class, class_uses_recursive($model))) {
+                if (! $model->isForceDeleting()) {
+                    $model->deleted_by = auth()->id();
+                    $model->saveQuietly();
+                }
+            }
+        });
+    }
 
     protected $casts = [
         'activo' => 'boolean',

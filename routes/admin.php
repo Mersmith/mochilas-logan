@@ -26,8 +26,8 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('productos/crear', 'pages::productos.create')
             ->name('productos.create')
             ->middleware('can:productos.crear');
-        Route::livewire('productos/{producto}/gestionar', 'pages::productos.manage')
-            ->name('productos.manage')
+        Route::livewire('productos/{producto}/editar', 'pages::productos.edit')
+            ->name('productos.edit')
             ->middleware('can:productos.editar');
 
         // Guías de Inventario (almacen, logistica, supervisor, admin)
