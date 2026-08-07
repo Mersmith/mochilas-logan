@@ -95,14 +95,32 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('tipos-producto', 'pages::tipos-producto.index')
             ->name('tipos-producto.index')
             ->middleware('can:tipos-producto.ver');
+        Route::livewire('tipos-producto/crear', 'pages::tipos-producto.create')
+            ->name('tipos-producto.create')
+            ->middleware('can:tipos-producto.editar');
+        Route::livewire('tipos-producto/{tipoProducto}/editar', 'pages::tipos-producto.edit')
+            ->name('tipos-producto.edit')
+            ->middleware('can:tipos-producto.editar');
 
         Route::livewire('categorias', 'pages::categorias.index')
             ->name('categorias.index')
             ->middleware('can:categorias.ver');
+        Route::livewire('categorias/crear', 'pages::categorias.create')
+            ->name('categorias.create')
+            ->middleware('can:categorias.editar');
+        Route::livewire('categorias/{categoria}/editar', 'pages::categorias.edit')
+            ->name('categorias.edit')
+            ->middleware('can:categorias.editar');
 
         Route::livewire('marcas', 'pages::marcas.index')
             ->name('marcas.index')
             ->middleware('can:marcas.ver');
+        Route::livewire('marcas/crear', 'pages::marcas.create')
+            ->name('marcas.create')
+            ->middleware('can:marcas.editar');
+        Route::livewire('marcas/{marca}/editar', 'pages::marcas.edit')
+            ->name('marcas.edit')
+            ->middleware('can:marcas.editar');
 
         Route::livewire('atributos', 'pages::atributos.index')
             ->name('atributos.index')
@@ -127,10 +145,22 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('tipos-documento', 'pages::tipos-documento.index')
             ->name('tipos-documento.index')
             ->middleware('can:tipos-documento.ver');
+        Route::livewire('tipos-documento/crear', 'pages::tipos-documento.create')
+            ->name('tipos-documento.create')
+            ->middleware('can:tipos-documento.editar');
+        Route::livewire('tipos-documento/{tipoDocumento}/editar', 'pages::tipos-documento.edit')
+            ->name('tipos-documento.edit')
+            ->middleware('can:tipos-documento.editar');
 
         Route::livewire('series', 'pages::series.index')
             ->name('series.index')
             ->middleware('can:series.ver');
+        Route::livewire('series/crear', 'pages::series.create')
+            ->name('series.create')
+            ->middleware('can:series.editar');
+        Route::livewire('series/{serie}/editar', 'pages::series.edit')
+            ->name('series.edit')
+            ->middleware('can:series.editar');
 
         // =============================================
         // SEGURIDAD: Roles y Permisos (admin)

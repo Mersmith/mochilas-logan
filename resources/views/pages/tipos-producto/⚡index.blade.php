@@ -1,174 +1,301 @@
 <?php
 
 use App\Models\TipoProducto;
-use Illuminate\Support\Str;
+use App\Exports\TipoProductosExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
-new #[Title('Gestión de Tipos de Producto')] class extends Component {
-    public ?int $tipo_id = null;
-    public string $nombre = '';
-    public string $slug = '';
-    public bool $activo = true;
+new #[Title('Tipos de Producto')] class extends Component {
+    use WithPagination;
 
-    // Automatically generate slug when name changes
-    public function updatedNombre($value)
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        $this->slug = Str::slug($value);
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
+        }
     }
 
-    public function guardar(): void
+    public function resetFiltros()
     {
-        if (!auth()->user()->can('tipos-producto.editar')) {
-            abort(403, 'No tienes permiso para editar tipos de producto.');
-        }
-
-        $this->validate([
-            'nombre' => 'required|string|max:255',
-            'slug' => 'required|string|max:255|unique:tipo_productos,slug,' . ($this->tipo_id ?: 'NULL'),
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->tipo_id) {
-            $tipo = TipoProducto::findOrFail($this->tipo_id);
-            $tipo->update([
-                'nombre' => $this->nombre,
-                'slug' => $this->slug,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Tipo de producto actualizado.'));
-        } else {
-            TipoProducto::create([
-                'nombre' => $this->nombre,
-                'slug' => $this->slug,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Tipo de producto registrado.'));
-        }
-
-        $this->limpiarForm();
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
     }
 
-    public function editar(int $id): void
+    protected function getBaseQuery()
     {
-        $tipo = TipoProducto::findOrFail($id);
-        $this->tipo_id = $tipo->id;
-        $this->nombre = $tipo->nombre;
-        $this->slug = $tipo->slug;
-        $this->activo = $tipo->activo;
+        $query = TipoProducto::query()
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%')
+                                               ->orWhere('slug', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        }
+
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    #[Computed]
+    public function tiposProducto()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
     }
 
     public function eliminar(int $id): void
     {
         if (!auth()->user()->can('tipos-producto.editar')) {
-            abort(403, 'No tienes permiso para eliminar tipos de producto.');
+            abort(403);
         }
 
-        $tipo = TipoProducto::findOrFail($id);
-        
-        if ($tipo->productos()->count() > 0) {
-            Flux::toast(variant: 'danger', text: __('No se puede eliminar porque tiene productos asociados.'));
-            return;
+        $tipoProducto = TipoProducto::withTrashed()->findOrFail($id);
+
+        if ($tipoProducto->trashed()) {
+            $tipoProducto->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $tipoProducto->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
+    }
+
+    public function restaurar(int $id): void
+    {
+        if (!auth()->user()->can('tipos-producto.editar')) {
+            abort(403);
         }
 
-        $tipo->delete();
-        Flux::toast(variant: 'success', text: __('Tipo de producto eliminado.'));
+        $tipoProducto = TipoProducto::withTrashed()->findOrFail($id);
+        $tipoProducto->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
     }
 
-    public function limpiarForm(): void
+    public function exportarTodos()
     {
-        $this->tipo_id = null;
-        $this->nombre = '';
-        $this->slug = '';
-        $this->activo = true;
+        $query = TipoProducto::query()->orderBy('nombre', 'asc');
+        return Excel::download(new TipoProductosExport($query), 'todos_los_tipos_producto.xlsx');
     }
 
-    #[Computed]
-    public function tipos()
+    public function exportarFiltrados()
     {
-        return TipoProducto::withCount('productos')->orderBy('nombre', 'asc')->get();
+        $query = $this->getBaseQuery();
+        return Excel::download(new TipoProductosExport($query), 'tipos_producto_filtrados.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Tipos de Producto') }}</flux:heading>
-            <flux:subheading>{{ __('Administra las categorías principales o tipos de los productos.') }}</flux:subheading>
+            <flux:subheading>{{ __('Administra los tipos de producto como Mochilas, Carteras, etc.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('tipos-producto.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.tipos-producto.create') }}" wire:navigate>
+                    {{ __('Nuevo Tipo de Producto') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('tipos-producto.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $tipo_id ? __('Editar Tipo') : __('Nuevo Tipo') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model.live="nombre" :label="__('Nombre del Tipo')" placeholder="Ej. Mochila Escolar" required />
-                    
-                    <flux:input wire:model="slug" :label="__('Slug (URL)')" placeholder="mochila-escolar" required />
-
-                    <flux:checkbox wire:model="activo" :label="__('Activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($tipo_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $tipo_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por nombre o slug...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('tipos-producto.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Tipos Registrados') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3">{{ __('Slug') }}</th>
-                            <th class="p-3 text-center">{{ __('Productos') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3">{{ __('Slug') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
+                        @can('tipos-producto.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->tiposProducto as $tipoProducto)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $tipoProducto->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $tipoProducto->nombre }}
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $tipoProducto->slug }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($tipoProducto->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $tipoProducto->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($tipoProducto->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('tipos-producto.editar')
-                                <th class="p-3"></th>
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($tipoProducto->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $tipoProducto->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $tipoProducto->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.tipos-producto.edit', $tipoProducto->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $tipoProducto->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
                             @endcan
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->tipos as $tipo)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">{{ $tipo->nombre }}</td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">{{ $tipo->slug }}</td>
-                                <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">{{ $tipo->productos_count }}</td>
-                                <td class="p-3 text-center">
-                                    @if($tipo->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('tipos-producto.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $tipo->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $tipo->id }})" wire:confirm="¿Está seguro?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('tipos-producto.editar') ? 5 : 4 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay tipos registrados.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('tipos-producto.editar') ? 6 : 5 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+        @if($this->tiposProducto->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->tiposProducto->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->tiposProducto->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
     </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

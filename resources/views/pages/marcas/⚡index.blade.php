@@ -1,182 +1,301 @@
 <?php
 
 use App\Models\Marca;
-use Illuminate\Support\Str;
+use App\Exports\MarcasExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
-new #[Title('Gestión de Marcas')] class extends Component {
-    public ?int $marca_id = null;
-    public string $nombre = '';
-    public string $slug = '';
-    public string $descripcion = '';
-    public bool $activo = true;
+new #[Title('Marcas')] class extends Component {
+    use WithPagination;
 
-    // Automatically generate slug when name changes
-    public function updatedNombre($value)
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        $this->slug = Str::slug($value);
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
+        }
     }
 
-    public function guardar(): void
+    public function resetFiltros()
     {
-        if (!auth()->user()->can('marcas.editar')) {
-            abort(403, 'No tienes permiso para editar marcas.');
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+
+    protected function getBaseQuery()
+    {
+        $query = Marca::query()
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%')
+                                               ->orWhere('slug', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
         }
 
-        $this->validate([
-            'nombre' => 'required|string|max:255',
-            'slug' => 'required|string|max:255|unique:marcas,slug,' . ($this->marca_id ?: 'NULL'),
-            'descripcion' => 'nullable|string',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->marca_id) {
-            $marca = Marca::findOrFail($this->marca_id);
-            $marca->update([
-                'nombre' => $this->nombre,
-                'slug' => $this->slug,
-                'descripcion' => $this->descripcion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Marca actualizada.'));
-        } else {
-            Marca::create([
-                'nombre' => $this->nombre,
-                'slug' => $this->slug,
-                'descripcion' => $this->descripcion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Marca registrada.'));
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
         }
 
-        $this->limpiarForm();
-    }
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
 
-    public function editar(int $id): void
-    {
-        $marca = Marca::findOrFail($id);
-        $this->marca_id = $marca->id;
-        $this->nombre = $marca->nombre;
-        $this->slug = $marca->slug;
-        $this->descripcion = $marca->descripcion ?? '';
-        $this->activo = $marca->activo;
-    }
-
-    public function eliminar(int $id): void
-    {
-        if (!auth()->user()->can('marcas.editar')) {
-            abort(403, 'No tienes permiso para eliminar marcas.');
-        }
-
-        $marca = Marca::findOrFail($id);
-        
-        // Block deletion if relations exist (add logic here if needed later when Products exist)
-        
-        $marca->delete();
-        Flux::toast(variant: 'success', text: __('Marca eliminada.'));
-    }
-
-    public function limpiarForm(): void
-    {
-        $this->marca_id = null;
-        $this->nombre = '';
-        $this->slug = '';
-        $this->descripcion = '';
-        $this->activo = true;
+        return $query;
     }
 
     #[Computed]
     public function marcas()
     {
-        return Marca::orderBy('nombre', 'asc')->get();
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function eliminar(int $id): void
+    {
+        if (!auth()->user()->can('marcas.editar')) {
+            abort(403);
+        }
+
+        $marca = Marca::withTrashed()->findOrFail($id);
+
+        if ($marca->trashed()) {
+            $marca->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $marca->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
+    }
+
+    public function restaurar(int $id): void
+    {
+        if (!auth()->user()->can('marcas.editar')) {
+            abort(403);
+        }
+
+        $marca = Marca::withTrashed()->findOrFail($id);
+        $marca->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
+    }
+
+    public function exportarTodos()
+    {
+        $query = Marca::query()->orderBy('nombre', 'asc');
+        return Excel::download(new MarcasExport($query), 'todas_las_marcas.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->getBaseQuery();
+        return Excel::download(new MarcasExport($query), 'marcas_filtradas.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <flux:heading size="xl">{{ __('Gestión de Marcas') }}</flux:heading>
+            <flux:heading size="xl">{{ __('Marcas') }}</flux:heading>
             <flux:subheading>{{ __('Administra las marcas de los productos.') }}</flux:subheading>
         </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('marcas.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.marcas.create') }}" wire:navigate>
+                    {{ __('Nueva Marca') }}
+                </flux:button>
+            @endcan
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('marcas.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $marca_id ? __('Editar Marca') : __('Nueva Marca') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model.live="nombre" :label="__('Nombre')" placeholder="Ej. Porta, Artesco..." required />
-                    
-                    <flux:input wire:model="slug" :label="__('Slug (URL)')" placeholder="porta" required />
-
-                    <flux:textarea wire:model="descripcion" :label="__('Descripción')" placeholder="Detalles de la marca..." />
-
-                    <flux:checkbox wire:model="activo" :label="__('Activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($marca_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $marca_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por nombre o slug...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('marcas.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Marcas Registradas') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3">{{ __('Slug') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
-                            @can('marcas.editar')
-                                <th class="p-3"></th>
-                            @endcan
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->marcas as $marca)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">
-                                    {{ $marca->nombre }}
-                                    @if($marca->descripcion)
-                                        <div class="text-xs text-zinc-500 font-normal mt-0.5 line-clamp-1" title="{{ $marca->descripcion }}">{{ $marca->descripcion }}</div>
-                                    @endif
-                                </td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">{{ $marca->slug }}</td>
-                                <td class="p-3 text-center">
-                                    @if($marca->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('marcas.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $marca->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $marca->id }})" wire:confirm="¿Está seguro de eliminar esta marca?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('marcas.editar') ? 4 : 3 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay marcas registradas.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
             </div>
         </div>
     </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3">{{ __('Slug') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
+                        @can('marcas.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->marcas as $marca)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $marca->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $marca->nombre }}
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $marca->slug }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($marca->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $marca->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($marca->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            @can('marcas.editar')
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($marca->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $marca->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $marca->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.marcas.edit', $marca->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $marca->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
+                            @endcan
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('marcas.editar') ? 6 : 5 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($this->marcas->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->marcas->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->marcas->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
+    </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

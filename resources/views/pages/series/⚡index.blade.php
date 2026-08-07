@@ -1,212 +1,293 @@
 <?php
 
 use App\Models\Serie;
-use App\Models\Sede;
-use App\Models\TipoDocumento;
+use App\Exports\SeriesExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
 new #[Title('Gestión de Series')] class extends Component {
-    public ?int $ser_id = null;
-    public ?int $sede_id = null;
-    public ?int $tipo_documento_id = null;
-    public string $serie = '';
-    public int $correlativo = 1;
-    public bool $activo = true;
+    use WithPagination;
 
-    public function mount(): void
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        $sede = Sede::first();
-        if ($sede) {
-            $this->sede_id = $sede->id;
-        }
-
-        $tipo = TipoDocumento::first();
-        if ($tipo) {
-            $this->tipo_documento_id = $tipo->id;
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
     }
 
-    public function guardar(): void
+    public function resetFiltros()
     {
-        if (!auth()->user()->can('series.editar')) {
-            abort(403, 'No tienes permiso para editar series.');
-        }
-
-        $this->validate([
-            'sede_id' => 'required|exists:sedes,id',
-            'tipo_documento_id' => 'required|exists:tipo_documentos,id',
-            'serie' => 'required|string|max:10',
-            'correlativo' => 'required|integer|min:1',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->ser_id) {
-            $ser = Serie::findOrFail($this->ser_id);
-            $ser->update([
-                'sede_id' => $this->sede_id,
-                'tipo_documento_id' => $this->tipo_documento_id,
-                'serie' => strtoupper($this->serie),
-                'correlativo' => $this->correlativo,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Serie actualizada.'));
-        } else {
-            Serie::create([
-                'sede_id' => $this->sede_id,
-                'tipo_documento_id' => $this->tipo_documento_id,
-                'serie' => strtoupper($this->serie),
-                'correlativo' => $this->correlativo,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Serie registrada con éxito.'));
-        }
-
-        $this->limpiarForm();
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
     }
 
-    public function editar(int $id): void
+    protected function getBaseQuery()
     {
-        $ser = Serie::findOrFail($id);
-        $this->ser_id = $ser->id;
-        $this->sede_id = $ser->sede_id;
-        $this->tipo_documento_id = $ser->tipo_documento_id;
-        $this->serie = $ser->serie;
-        $this->correlativo = $ser->correlativo;
-        $this->activo = $ser->activo;
+        $query = Serie::query()
+            ->with(['sede', 'tipoDocumento'])
+            ->when($this->search, fn($q) => $q->where('serie', 'like', '%' . $this->search . '%'))
+            ->orderBy('id', 'desc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        }
+
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    #[Computed]
+    public function series()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
     }
 
     public function eliminar(int $id): void
     {
         if (!auth()->user()->can('series.editar')) {
-            abort(403, 'No tienes permiso para eliminar series.');
+            abort(403);
         }
 
-        $ser = Serie::findOrFail($id);
-        $ser->delete();
-        Flux::toast(variant: 'success', text: __('Serie eliminada.'));
+        $serie = Serie::withTrashed()->findOrFail($id);
+
+        if ($serie->trashed()) {
+            $serie->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $serie->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
     }
 
-    public function limpiarForm(): void
+    public function restaurar(int $id): void
     {
-        $this->ser_id = null;
-        $this->serie = '';
-        $this->correlativo = 1;
-        $this->activo = true;
+        if (!auth()->user()->can('series.editar')) {
+            abort(403);
+        }
+
+        $serie = Serie::withTrashed()->findOrFail($id);
+        $serie->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
     }
 
-    #[Computed]
-    public function seriesList()
+    public function exportarTodos()
     {
-        return Serie::with(['sede', 'tipoDocumento'])->orderBy('serie', 'asc')->get();
+        $query = Serie::query()->with(['sede', 'tipoDocumento'])->orderBy('id', 'desc');
+        return Excel::download(new SeriesExport($query), 'todas_las_series.xlsx');
     }
 
-    #[Computed]
-    public function sedes()
+    public function exportarFiltrados()
     {
-        return Sede::where('activo', true)->orderBy('nombre')->get();
-    }
-
-    #[Computed]
-    public function tiposDocumento()
-    {
-        return TipoDocumento::where('activo', true)->orderBy('nombre')->get();
+        $query = $this->getBaseQuery();
+        return Excel::download(new SeriesExport($query), 'series_filtradas.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Gestión de Series') }}</flux:heading>
-            <flux:subheading>{{ __('Administra las series de comprobantes (Facturas, Boletas, etc.) por sede.') }}</flux:subheading>
+            <flux:subheading>{{ __('Administra las series y sus correlativos asignados a cada sede y tipo de documento.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('series.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.series.create') }}" wire:navigate>
+                    {{ __('Nueva Serie') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('series.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $ser_id ? __('Editar Serie') : __('Nueva Serie') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:select wire:model="sede_id" :label="__('Sede')" required>
-                        @foreach($this->sedes as $sede)
-                            <flux:select.option :value="$sede->id">{{ $sede->nombre }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-
-                    <flux:select wire:model="tipo_documento_id" :label="__('Tipo de Documento')" required>
-                        @foreach($this->tiposDocumento as $tipo)
-                            <flux:select.option :value="$tipo->id">{{ $tipo->nombre }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-
-                    <flux:input wire:model="serie" :label="__('Serie')" placeholder="Ej. F001" required />
-                    
-                    <flux:input type="number" wire:model="correlativo" :label="__('Correlativo Actual')" min="1" required />
-
-                    <flux:checkbox wire:model="activo" :label="__('Serie activa')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($ser_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $ser_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por número de serie...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('series.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Series Registradas') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Sede') }}</th>
-                            <th class="p-3">{{ __('Documento') }}</th>
-                            <th class="p-3">{{ __('Serie') }}</th>
-                            <th class="p-3">{{ __('Correlativo') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Sede') }}</th>
+                        <th class="p-3">{{ __('Tipo de Documento') }}</th>
+                        <th class="p-3">{{ __('Serie') }}</th>
+                        <th class="p-3 text-center">{{ __('Correlativo') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        @can('series.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->series as $serie)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $serie->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $serie->sede->nombre ?? '-' }}
+                            </td>
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $serie->tipoDocumento->nombre ?? '-' }}
+                            </td>
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $serie->serie }}
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400 font-mono">
+                                {{ str_pad($serie->correlativo, 8, '0', STR_PAD_LEFT) }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($serie->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('series.editar')
-                                <th class="p-3"></th>
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($serie->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $serie->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $serie->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.series.edit', $serie->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $serie->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
                             @endcan
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->seriesList as $ser)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">{{ $ser->sede->nombre ?? '-' }}</td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">{{ $ser->tipoDocumento->nombre ?? '-' }}</td>
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">{{ $ser->serie }}</td>
-                                <td class="p-3 font-mono text-zinc-600 dark:text-zinc-400">{{ str_pad($ser->correlativo, 8, '0', STR_PAD_LEFT) }}</td>
-                                <td class="p-3 text-center">
-                                    @if($ser->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('series.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $ser->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $ser->id }})" wire:confirm="¿Está seguro de eliminar esta serie?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('series.editar') ? 6 : 5 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay series registradas.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('series.editar') ? 6 : 5 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+        @if($this->series->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->series->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->series->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
     </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

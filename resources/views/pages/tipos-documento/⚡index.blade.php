@@ -1,159 +1,310 @@
 <?php
 
 use App\Models\TipoDocumento;
+use App\Exports\TipoDocumentosExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
-new #[Title('Gestión de Tipos de Documento')] class extends Component {
-    public ?int $tipo_id = null;
-    public string $nombre = '';
-    public string $abreviatura = '';
-    public bool $activo = true;
+new #[Title('Tipos de Documento')] class extends Component {
+    use WithPagination;
 
-    public function guardar(): void
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        if (!auth()->user()->can('tipos-documento.editar')) {
-            abort(403, 'No tienes permiso para editar tipos de documento.');
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
-
-        $this->validate([
-            'nombre' => 'required|string|max:255',
-            'abreviatura' => 'nullable|string|max:10',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->tipo_id) {
-            $tipo = TipoDocumento::findOrFail($this->tipo_id);
-            $tipo->update([
-                'nombre' => $this->nombre,
-                'abreviatura' => strtoupper($this->abreviatura),
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Tipo de documento actualizado.'));
-        } else {
-            TipoDocumento::create([
-                'nombre' => $this->nombre,
-                'abreviatura' => strtoupper($this->abreviatura),
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Tipo de documento registrado.'));
-        }
-
-        $this->limpiarForm();
     }
 
-    public function editar(int $id): void
+    public function resetFiltros()
     {
-        $tipo = TipoDocumento::findOrFail($id);
-        $this->tipo_id = $tipo->id;
-        $this->nombre = $tipo->nombre;
-        $this->abreviatura = $tipo->abreviatura ?? '';
-        $this->activo = $tipo->activo;
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+
+    protected function getBaseQuery()
+    {
+        $query = TipoDocumento::query()
+            ->withCount(['series'])
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        }
+
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    #[Computed]
+    public function tiposDocumento()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
     }
 
     public function eliminar(int $id): void
     {
         if (!auth()->user()->can('tipos-documento.editar')) {
-            abort(403, 'No tienes permiso para eliminar tipos de documento.');
+            abort(403);
         }
 
-        $tipo = TipoDocumento::findOrFail($id);
-        $tipo->delete();
-        Flux::toast(variant: 'success', text: __('Tipo de documento eliminado.'));
+        $tipoDocumento = TipoDocumento::withTrashed()->findOrFail($id);
+
+        if ($tipoDocumento->series()->count() > 0) {
+            Flux::toast(variant: 'danger', text: __('No se puede eliminar porque tiene series asignadas.'));
+            return;
+        }
+
+        if ($tipoDocumento->trashed()) {
+            $tipoDocumento->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $tipoDocumento->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
     }
 
-    public function limpiarForm(): void
+    public function restaurar(int $id): void
     {
-        $this->tipo_id = null;
-        $this->nombre = '';
-        $this->abreviatura = '';
-        $this->activo = true;
+        if (!auth()->user()->can('tipos-documento.editar')) {
+            abort(403);
+        }
+
+        $tipoDocumento = TipoDocumento::withTrashed()->findOrFail($id);
+        $tipoDocumento->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
     }
 
-    #[Computed]
-    public function tipos()
+    public function exportarTodos()
     {
-        return TipoDocumento::orderBy('nombre', 'asc')->get();
+        $query = TipoDocumento::query()->orderBy('nombre', 'asc');
+        return Excel::download(new TipoDocumentosExport($query), 'todos_los_tipos_documento.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->getBaseQuery();
+        return Excel::download(new TipoDocumentosExport($query), 'tipos_documento_filtrados.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Tipos de Documento') }}</flux:heading>
-            <flux:subheading>{{ __('Administra los tipos de documentos válidos (Facturas, Boletas, Guías, etc.)') }}</flux:subheading>
+            <flux:subheading>{{ __('Administra los tipos de documentos como Boletas, Facturas, etc.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('tipos-documento.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.tipos-documento.create') }}" wire:navigate>
+                    {{ __('Nuevo Tipo de Documento') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('tipos-documento.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $tipo_id ? __('Editar Tipo') : __('Nuevo Tipo') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model="nombre" :label="__('Nombre del Documento')" placeholder="Ej. Factura Electrónica" required />
-                    
-                    <flux:input wire:model="abreviatura" :label="__('Abreviatura / Código')" placeholder="Ej. FAC" />
-
-                    <flux:checkbox wire:model="activo" :label="__('Activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($tipo_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $tipo_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por nombre...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('tipos-documento.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Tipos Registrados') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3">{{ __('Abreviatura') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3 text-center">{{ __('Código SUNAT') }}</th>
+                        <th class="p-3 text-center">{{ __('Series') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
+                        @can('tipos-documento.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->tiposDocumento as $tipoDocumento)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $tipoDocumento->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $tipoDocumento->nombre }}
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $tipoDocumento->codigo_sunat ?: '-' }}
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $tipoDocumento->series_count ?? 0 }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($tipoDocumento->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $tipoDocumento->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($tipoDocumento->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('tipos-documento.editar')
-                                <th class="p-3"></th>
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($tipoDocumento->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $tipoDocumento->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $tipoDocumento->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.tipos-documento.edit', $tipoDocumento->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $tipoDocumento->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
                             @endcan
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->tipos as $tipo)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">{{ $tipo->nombre }}</td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">{{ $tipo->abreviatura ?: '-' }}</td>
-                                <td class="p-3 text-center">
-                                    @if($tipo->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('tipos-documento.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $tipo->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $tipo->id }})" wire:confirm="¿Está seguro?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('tipos-documento.editar') ? 4 : 3 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay tipos registrados.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('tipos-documento.editar') ? 7 : 6 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+        @if($this->tiposDocumento->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->tiposDocumento->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->tiposDocumento->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
     </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

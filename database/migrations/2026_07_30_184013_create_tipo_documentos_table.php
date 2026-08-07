@@ -16,7 +16,13 @@ return new class extends Migration
             $table->string('nombre')->unique();
             $table->string('codigo_sunat', 10)->nullable();
             $table->boolean('activo')->default(true);
+
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

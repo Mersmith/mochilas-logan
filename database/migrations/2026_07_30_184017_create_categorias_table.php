@@ -20,7 +20,13 @@ return new class extends Migration
             $table->text('descripcion')->nullable();
             $table->integer('orden')->default(0);
             $table->boolean('activo')->default(true);
+
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 
