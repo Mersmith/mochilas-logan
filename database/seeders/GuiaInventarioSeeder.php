@@ -40,7 +40,7 @@ class GuiaInventarioSeeder extends Seeder
                 'fecha_movimiento' => now(),
                 'estado' => 'Procesado',
                 'motivo' => 'Compra',
-                'creado_por_usuario_id' => $admin->id,
+                'created_by' => $admin->id,
             ]
         );
 

@@ -33,7 +33,11 @@ return new class extends Migration
 
             $table->unsignedBigInteger('venta_id')->nullable(); // Relación débil con ventas
 
-            $table->foreignId('creado_por_usuario_id')->constrained('users')->onDelete('restrict');
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
+            $table->softDeletes();
             $table->timestamps();
 
             $table->unique(['tipo_documento_id', 'serie', 'correlativo']);

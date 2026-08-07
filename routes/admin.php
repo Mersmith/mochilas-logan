@@ -37,6 +37,12 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('guias/crear', 'pages::guias.create')
             ->name('guias.create')
             ->middleware('can:guias.crear');
+        Route::livewire('guias/{guia}/editar', 'pages::guias.edit')
+            ->name('guias.edit')
+            ->middleware('can:guias.crear'); // Crear/Editar borrador requieren lo mismo usualmente
+        Route::livewire('guias/{guia}', 'pages::guias.show')
+            ->name('guias.show')
+            ->middleware('can:guias.ver');
 
         // Kardex (almacen, supervisor, admin)
         Route::livewire('kardex', 'pages::kardex.index')

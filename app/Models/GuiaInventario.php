@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class GuiaInventario extends Model
 {
-    use HasFactory;
+    use HasFactory, \Illuminate\Database\Eloquent\SoftDeletes;
 
     protected $table = 'guias_inventario';
 
@@ -28,13 +28,36 @@ class GuiaInventario extends Model
         'estado',
         'motivo',
         'venta_id',
-        'creado_por_usuario_id',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [
         'fecha_movimiento' => 'date',
         'correlativo' => 'integer',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($model) {
+            $model->created_by = auth()->id();
+            $model->updated_by = auth()->id();
+        });
+
+        static::updating(function ($model) {
+            $model->updated_by = auth()->id();
+        });
+
+        static::deleting(function ($model) {
+            if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($model))) {
+                if (! $model->isForceDeleting()) {
+                    $model->deleted_by = auth()->id();
+                    $model->saveQuietly();
+                }
+            }
+        });
+    }
 
     /**
      * Get the provider of the inventory guide (if Entry).
@@ -83,7 +106,7 @@ class GuiaInventario extends Model
      */
     public function creador(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'creado_por_usuario_id');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**
