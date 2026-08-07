@@ -48,13 +48,13 @@
                         @endcan
 
                         @can('promociones.ver')
-                            <flux:sidebar.item icon="ticket" :href="route('admin.promociones.index')" :current="request()->routeIs('admin.promociones.index*')" wire:navigate>
-                                {{ __('Promociones / Cupones') }}
+                            <flux:sidebar.item icon="ticket" :href="route('admin.cupones.index')" :current="request()->routeIs('admin.cupones.index*') || request()->routeIs('admin.cupones.create*') || request()->routeIs('admin.cupones.edit*')" wire:navigate>
+                                {{ __('Cupones') }}
                             </flux:sidebar.item>
                         @endcan
 
-                        @can('descuentos.ver')
-                            <flux:sidebar.item icon="receipt-percent" :href="route('admin.descuentos.index')" :current="request()->routeIs('admin.descuentos.index*')" wire:navigate>
+                        @can('promociones.ver')
+                            <flux:sidebar.item icon="receipt-percent" :href="route('admin.descuentos.index')" :current="request()->routeIs('admin.descuentos.index*') || request()->routeIs('admin.descuentos.create*') || request()->routeIs('admin.descuentos.edit*')" wire:navigate>
                                 {{ __('Descuentos') }}
                             </flux:sidebar.item>
                         @endcan

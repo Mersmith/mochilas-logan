@@ -61,14 +61,26 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->name('ventas.create')
             ->middleware('can:ventas.crear');
 
-        // Promociones y Cupones (supervisor, admin)
-        Route::livewire('promociones', 'pages::promociones.index')
-            ->name('promociones.index')
-            ->middleware('can:promociones.ver');
-
+        // Descuentos y Cupones (supervisor, admin)
         Route::livewire('descuentos', 'pages::descuentos.index')
             ->name('descuentos.index')
-            ->middleware('can:descuentos.ver');
+            ->middleware('can:promociones.ver');
+        Route::livewire('descuentos/crear', 'pages::descuentos.create')
+            ->name('descuentos.create')
+            ->middleware('can:promociones.crear');
+        Route::livewire('descuentos/{descuento}/editar', 'pages::descuentos.edit')
+            ->name('descuentos.edit')
+            ->middleware('can:promociones.editar');
+
+        Route::livewire('cupones', 'pages::cupones.index')
+            ->name('cupones.index')
+            ->middleware('can:promociones.ver');
+        Route::livewire('cupones/crear', 'pages::cupones.create')
+            ->name('cupones.create')
+            ->middleware('can:promociones.crear');
+        Route::livewire('cupones/{cupon}/editar', 'pages::cupones.edit')
+            ->name('cupones.edit')
+            ->middleware('can:promociones.editar');
 
         // =============================================
         // MANTENIMIENTO: Organización
