@@ -1,152 +1,280 @@
 <?php
 
 use App\Models\ListaPrecio;
+use App\Exports\ListaPreciosExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
-new #[Title('Gestión de Listas de Precios')] class extends Component {
-    public ?int $lista_id = null;
-    public string $nombre = '';
-    public bool $activo = true;
+new #[Title('Mantenimiento de Listas de Precios')] class extends Component {
+    use WithPagination;
 
-    public function guardar(): void
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        if (!auth()->user()->can('lista-precios.editar')) {
-            abort(403, 'No tienes permiso para editar listas de precios.');
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
-
-        $this->validate([
-            'nombre' => 'required|string|max:255|unique:lista_precios,nombre,' . ($this->lista_id ?: 'NULL'),
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->lista_id) {
-            $lista = ListaPrecio::findOrFail($this->lista_id);
-            $lista->update([
-                'nombre' => $this->nombre,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Lista de precios actualizada.'));
-        } else {
-            ListaPrecio::create([
-                'nombre' => $this->nombre,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Lista de precios registrada.'));
-        }
-
-        $this->limpiarForm();
     }
 
-    public function editar(int $id): void
+    public function resetFiltros()
     {
-        $lista = ListaPrecio::findOrFail($id);
-        $this->lista_id = $lista->id;
-        $this->nombre = $lista->nombre;
-        $this->activo = $lista->activo;
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
     }
 
-    public function eliminar(int $id): void
+    protected function getBaseQuery()
     {
-        if (!auth()->user()->can('lista-precios.editar')) {
-            abort(403, 'No tienes permiso para eliminar listas de precios.');
+        $query = ListaPrecio::query()
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
         }
 
-        $lista = ListaPrecio::findOrFail($id);
-        
-        // Block deletion if prices are registered (optional based on future needs)
-        
-        $lista->delete();
-        Flux::toast(variant: 'success', text: __('Lista de precios eliminada.'));
-    }
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        }
 
-    public function limpiarForm(): void
-    {
-        $this->lista_id = null;
-        $this->nombre = '';
-        $this->activo = true;
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
     }
 
     #[Computed]
     public function listas()
     {
-        return ListaPrecio::orderBy('nombre', 'asc')->get();
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function eliminar(int $id): void
+    {
+        if (!auth()->user()->can('lista-precios.editar')) {
+            abort(403);
+        }
+
+        $lista = ListaPrecio::withTrashed()->findOrFail($id);
+
+        if ($lista->trashed()) {
+            $lista->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $lista->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
+    }
+
+    public function restaurar(int $id): void
+    {
+        if (!auth()->user()->can('lista-precios.editar')) {
+            abort(403);
+        }
+
+        $lista = ListaPrecio::withTrashed()->findOrFail($id);
+        $lista->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
+    }
+
+    public function exportarTodos()
+    {
+        $query = ListaPrecio::query()->orderBy('nombre', 'asc');
+        return Excel::download(new ListaPreciosExport($query), 'todas_las_listas_de_precios.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->getBaseQuery();
+        return Excel::download(new ListaPreciosExport($query), 'listas_de_precios_filtradas.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <flux:heading size="xl">{{ __('Gestión de Listas de Precios') }}</flux:heading>
-            <flux:subheading>{{ __('Administra las listas de precios aplicables a tus productos (Ej. Precio Mayorista, Precio Normal).') }}</flux:subheading>
+            <flux:heading size="xl">{{ __('Listas de Precios') }}</flux:heading>
+            <flux:subheading>{{ __('Administra las diferentes listas de precios disponibles.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('lista-precios.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.lista-precios.create') }}" wire:navigate>
+                    {{ __('Nueva Lista') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('lista-precios.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $lista_id ? __('Editar Lista') : __('Nueva Lista') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model="nombre" :label="__('Nombre de la Lista')" placeholder="Ej. Precio Mayorista" required />
-                    
-                    <flux:checkbox wire:model="activo" :label="__('Activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($lista_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $lista_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por nombre...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('lista-precios.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Listas Registradas') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        @can('lista-precios.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->listas as $lista)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $lista->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $lista->nombre }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($lista->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('lista-precios.editar')
-                                <th class="p-3"></th>
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($lista->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $lista->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $lista->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.lista-precios.edit', $lista->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $lista->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
                             @endcan
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->listas as $lista)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">{{ $lista->nombre }}</td>
-                                <td class="p-3 text-center">
-                                    @if($lista->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('lista-precios.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $lista->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $lista->id }})" wire:confirm="¿Está seguro de eliminar esta lista?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('lista-precios.editar') ? 3 : 2 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay listas registradas.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('lista-precios.editar') ? 3 : 2 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+        @if($this->listas->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->listas->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->listas->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
     </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>

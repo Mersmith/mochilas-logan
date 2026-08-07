@@ -125,10 +125,22 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('atributos', 'pages::atributos.index')
             ->name('atributos.index')
             ->middleware('can:atributos.ver');
+        Route::livewire('atributos/crear', 'pages::atributos.create')
+            ->name('atributos.create')
+            ->middleware('can:atributos.editar');
+        Route::livewire('atributos/{atributo}/editar', 'pages::atributos.edit')
+            ->name('atributos.edit')
+            ->middleware('can:atributos.editar');
 
         Route::livewire('unidades-medida', 'pages::unidades-medida.index')
             ->name('unidades-medida.index')
             ->middleware('can:unidades-medida.ver');
+        Route::livewire('unidades-medida/crear', 'pages::unidades-medida.create')
+            ->name('unidades-medida.create')
+            ->middleware('can:unidades-medida.editar');
+        Route::livewire('unidades-medida/{unidadMedida}/editar', 'pages::unidades-medida.edit')
+            ->name('unidades-medida.edit')
+            ->middleware('can:unidades-medida.editar');
 
         // =============================================
         // MANTENIMIENTO: Comercial y Documentos
@@ -137,10 +149,22 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('proveedores', 'pages::proveedores.index')
             ->name('proveedores.index')
             ->middleware('can:proveedores.ver');
+        Route::livewire('proveedores/crear', 'pages::proveedores.create')
+            ->name('proveedores.create')
+            ->middleware('can:proveedores.editar');
+        Route::livewire('proveedores/{proveedor}/editar', 'pages::proveedores.edit')
+            ->name('proveedores.edit')
+            ->middleware('can:proveedores.editar');
 
         Route::livewire('lista-precios', 'pages::lista-precios.index')
             ->name('lista-precios.index')
             ->middleware('can:lista-precios.ver');
+        Route::livewire('lista-precios/crear', 'pages::lista-precios.create')
+            ->name('lista-precios.create')
+            ->middleware('can:lista-precios.editar');
+        Route::livewire('lista-precios/{listaPrecio}/editar', 'pages::lista-precios.edit')
+            ->name('lista-precios.edit')
+            ->middleware('can:lista-precios.editar');
 
         Route::livewire('tipos-documento', 'pages::tipos-documento.index')
             ->name('tipos-documento.index')

@@ -15,6 +15,13 @@ return new class extends Migration
             $table->id();
             $table->string('nombre');
             $table->string('abreviacion', 10);
+            $table->boolean('activo')->default(true);
+
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
+            $table->softDeletes();
             $table->timestamps();
         });
     }

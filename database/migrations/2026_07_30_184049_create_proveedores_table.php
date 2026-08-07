@@ -19,6 +19,12 @@ return new class extends Migration
             $table->string('contacto_nombre')->nullable();
             $table->string('contacto_celular')->nullable();
             $table->boolean('activo')->default(true);
+
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
+
+            $table->softDeletes();
             $table->timestamps();
         });
     }

@@ -1,203 +1,297 @@
 <?php
 
 use App\Models\Proveedor;
+use App\Exports\ProveedoresExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
-new #[Title('Gestión de Proveedores')] class extends Component {
-    public ?int $prov_id = null;
-    public string $razon_social = '';
-    public string $ruc = '';
-    public string $direccion = '';
-    public string $contacto_nombre = '';
-    public string $contacto_celular = '';
-    public bool $activo = true;
+new #[Title('Mantenimiento de Proveedores')] class extends Component {
+    use WithPagination;
 
-    public function guardar(): void
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    public function updating($property)
     {
-        if (!auth()->user()->can('proveedores.editar')) {
-            abort(403, 'No tienes permiso para editar proveedores.');
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
-
-        $this->validate([
-            'razon_social' => 'required|string|max:150',
-            'ruc' => 'required|string|size:11|unique:proveedors,ruc,' . ($this->prov_id ?: 'NULL'),
-            'direccion' => 'nullable|string|max:200',
-            'contacto_nombre' => 'nullable|string|max:100',
-            'contacto_celular' => 'nullable|string|max:20',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->prov_id) {
-            $prov = Proveedor::findOrFail($this->prov_id);
-            $prov->update([
-                'razon_social' => $this->razon_social,
-                'ruc' => $this->ruc,
-                'direccion' => $this->direccion,
-                'contacto_nombre' => $this->contacto_nombre,
-                'contacto_celular' => $this->contacto_celular,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Proveedor actualizado.'));
-        } else {
-            Proveedor::create([
-                'razon_social' => $this->razon_social,
-                'ruc' => $this->ruc,
-                'direccion' => $this->direccion,
-                'contacto_nombre' => $this->contacto_nombre,
-                'contacto_celular' => $this->contacto_celular,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Proveedor registrado con éxito.'));
-        }
-
-        $this->limpiarForm();
     }
 
-    public function editar(int $id): void
+    public function resetFiltros()
     {
-        $prov = Proveedor::findOrFail($id);
-        $this->prov_id = $prov->id;
-        $this->razon_social = $prov->razon_social;
-        $this->ruc = $prov->ruc;
-        $this->direccion = $prov->direccion ?? '';
-        $this->contacto_nombre = $prov->contacto_nombre ?? '';
-        $this->contacto_celular = $prov->contacto_celular ?? '';
-        $this->activo = $prov->activo;
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
     }
 
-    public function eliminar(int $id): void
+    protected function getBaseQuery()
     {
-        if (!auth()->user()->can('proveedores.editar')) {
-            abort(403, 'No tienes permiso para eliminar proveedores.');
+        $query = Proveedor::query()
+            ->when($this->search, fn($q) => $q->where('razon_social', 'like', '%' . $this->search . '%')
+                                              ->orWhere('ruc', 'like', '%' . $this->search . '%'))
+            ->orderBy('razon_social', 'asc');
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
         }
 
-        $prov = Proveedor::findOrFail($id);
-        
-        // Relaciones con ingresos (si existen en el futuro)
-        if ($prov->ingresos()->count() > 0) {
-            Flux::toast(variant: 'danger', text: __('No se puede eliminar porque tiene ingresos o guías asociadas.'));
-            return;
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
         }
 
-        $prov->delete();
-        Flux::toast(variant: 'success', text: __('Proveedor eliminado.'));
-    }
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
 
-    public function limpiarForm(): void
-    {
-        $this->prov_id = null;
-        $this->razon_social = '';
-        $this->ruc = '';
-        $this->direccion = '';
-        $this->contacto_nombre = '';
-        $this->contacto_celular = '';
-        $this->activo = true;
+        return $query;
     }
 
     #[Computed]
     public function proveedores()
     {
-        return Proveedor::orderBy('razon_social', 'asc')->get();
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function eliminar(int $id): void
+    {
+        if (!auth()->user()->can('proveedores.editar')) {
+            abort(403);
+        }
+
+        $proveedor = Proveedor::withTrashed()->findOrFail($id);
+
+        if ($proveedor->trashed()) {
+            $proveedor->forceDelete();
+            Flux::toast(variant: 'success', text: __('Eliminado permanentemente.'));
+        } else {
+            $proveedor->delete();
+            Flux::toast(variant: 'success', text: __('Enviado a la papelera.'));
+        }
+    }
+
+    public function restaurar(int $id): void
+    {
+        if (!auth()->user()->can('proveedores.editar')) {
+            abort(403);
+        }
+
+        $proveedor = Proveedor::withTrashed()->findOrFail($id);
+        $proveedor->restore();
+
+        Flux::toast(variant: 'success', text: __('Restaurado correctamente.'));
+    }
+
+    public function exportarTodos()
+    {
+        $query = Proveedor::query()->orderBy('razon_social', 'asc');
+        return Excel::download(new ProveedoresExport($query), 'todos_los_proveedores.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->getBaseQuery();
+        return Excel::download(new ProveedoresExport($query), 'proveedores_filtrados.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <flux:heading size="xl">{{ __('Gestión de Proveedores') }}</flux:heading>
-            <flux:subheading>{{ __('Administra los proveedores de productos y mercadería.') }}</flux:subheading>
+            <flux:heading size="xl">{{ __('Proveedores') }}</flux:heading>
+            <flux:subheading>{{ __('Administra el catálogo de proveedores.') }}</flux:subheading>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('proveedores.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.proveedores.create') }}" wire:navigate>
+                    {{ __('Nuevo Proveedor') }}
+                </flux:button>
+            @endcan
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        @can('proveedores.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $prov_id ? __('Editar Proveedor') : __('Nuevo Proveedor') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:input wire:model="ruc" :label="__('RUC')" placeholder="Ej. 20123456789" required maxlength="11" />
-                    
-                    <flux:input wire:model="razon_social" :label="__('Razón Social')" placeholder="Ej. Corporación SAC" required />
-
-                    <flux:input wire:model="direccion" :label="__('Dirección')" placeholder="Av. Los Pinos..." />
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <flux:input wire:model="contacto_nombre" :label="__('Contacto')" placeholder="Juan Pérez" />
-                        <flux:input wire:model="contacto_celular" :label="__('Celular')" placeholder="987654321" />
-                    </div>
-
-                    <flux:checkbox wire:model="activo" :label="__('Proveedor activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($prov_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $prov_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por razón social o RUC...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('proveedores.editar') ? 'xl:col-span-2' : 'xl:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Proveedores Registrados') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('RUC') }}</th>
-                            <th class="p-3">{{ __('Razón Social') }}</th>
-                            <th class="p-3">{{ __('Contacto') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Razón Social') }}</th>
+                        <th class="p-3">{{ __('RUC') }}</th>
+                        <th class="p-3">{{ __('Contacto') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        @can('proveedores.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->proveedores as $proveedor)
+                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $proveedor->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $proveedor->razon_social }}
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $proveedor->ruc ?? '-' }}
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                @if($proveedor->contacto_nombre)
+                                    <div>{{ $proveedor->contacto_nombre }}</div>
+                                @endif
+                                @if($proveedor->contacto_celular)
+                                    <div class="text-xs">{{ $proveedor->contacto_celular }}</div>
+                                @endif
+                                @if(!$proveedor->contacto_nombre && !$proveedor->contacto_celular)
+                                    -
+                                @endif
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($proveedor->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('proveedores.editar')
-                                <th class="p-3"></th>
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($proveedor->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $proveedor->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $proveedor->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.proveedores.edit', $proveedor->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $proveedor->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
                             @endcan
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->proveedores as $prov)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-mono text-zinc-600 dark:text-zinc-400">{{ $prov->ruc }}</td>
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">
-                                    {{ $prov->razon_social }}
-                                    @if($prov->direccion)
-                                        <div class="text-xs font-normal text-zinc-500 mt-0.5">{{ $prov->direccion }}</div>
-                                    @endif
-                                </td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">
-                                    {{ $prov->contacto_nombre ?: '-' }}
-                                    @if($prov->contacto_celular)
-                                        <span class="text-xs text-zinc-500 block">{{ $prov->contacto_celular }}</span>
-                                    @endif
-                                </td>
-                                <td class="p-3 text-center">
-                                    @if($prov->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('proveedores.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $prov->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $prov->id }})" wire:confirm="¿Está seguro de eliminar este proveedor?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('proveedores.editar') ? 5 : 4 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay proveedores registrados.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('proveedores.editar') ? 5 : 4 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
+        @if($this->proveedores->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->proveedores->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->proveedores->total() }} {{ __('registro(s) encontrado(s)') }}</span>
+            </div>
+        @endif
     </div>
+
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>
