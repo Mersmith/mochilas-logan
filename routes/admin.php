@@ -81,6 +81,12 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('almacenes', 'pages::almacenes.index')
             ->name('almacenes.index')
             ->middleware('can:almacenes.ver');
+        Route::livewire('almacenes/crear', 'pages::almacenes.create')
+            ->name('almacenes.create')
+            ->middleware('can:almacenes.editar');
+        Route::livewire('almacenes/{almacen}/editar', 'pages::almacenes.edit')
+            ->name('almacenes.edit')
+            ->middleware('can:almacenes.editar');
 
         // =============================================
         // MANTENIMIENTO: Clasificación

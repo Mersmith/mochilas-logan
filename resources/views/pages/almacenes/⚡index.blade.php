@@ -1,70 +1,109 @@
 <?php
 
 use App\Models\Almacen;
-use App\Models\Sede;
+use App\Exports\AlmacenesExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use Flux\Flux;
 
 new #[Title('Gestión de Almacenes')] class extends Component {
-    public ?int $alm_id = null;
-    public ?int $sede_id = null;
-    public string $nombre = '';
-    public string $ubicacion = '';
-    public bool $activo = true;
+    use WithPagination;
 
-    public function mount(): void
+    // ── Filtros ──────────────────────────────────────────
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos'; // activos | desactivados | todos
+
+    #[Url]
+    public string $filtroPapelera = 'admitidos'; // admitidos | eliminados | todos
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 10;
+
+    /**
+     * Resetea la paginación cuando cambia algún filtro
+     */
+    public function updating($property)
     {
-        $sede = Sede::first();
-        if ($sede) {
-            $this->sede_id = $sede->id;
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+            $this->resetPage();
         }
     }
 
-    public function guardar(): void
+    public function resetFiltros()
     {
-        if (!auth()->user()->can('almacenes.editar')) {
-            abort(403, 'No tienes permiso para editar almacenes.');
-        }
-
-        $this->validate([
-            'sede_id' => 'required|exists:sedes,id',
-            'nombre' => 'required|string|max:255',
-            'ubicacion' => 'nullable|string|max:255',
-            'activo' => 'boolean',
-        ]);
-
-        if ($this->alm_id) {
-            $alm = Almacen::findOrFail($this->alm_id);
-            $alm->update([
-                'sede_id' => $this->sede_id,
-                'nombre' => $this->nombre,
-                'ubicacion' => $this->ubicacion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Almacén actualizado.'));
-        } else {
-            Almacen::create([
-                'sede_id' => $this->sede_id,
-                'nombre' => $this->nombre,
-                'ubicacion' => $this->ubicacion,
-                'activo' => $this->activo,
-            ]);
-            Flux::toast(variant: 'success', text: __('Almacén registrado con éxito.'));
-        }
-
-        $this->limpiarForm();
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->perPage = 10;
+        $this->resetPage();
     }
 
-    public function editar(int $id): void
+    /**
+     * Devuelve el query builder base con los filtros aplicados.
+     */
+    protected function getBaseQuery()
     {
-        $alm = Almacen::findOrFail($id);
-        $this->alm_id = $alm->id;
-        $this->sede_id = $alm->sede_id;
-        $this->nombre = $alm->nombre;
-        $this->ubicacion = $alm->ubicacion ?? '';
-        $this->activo = $alm->activo;
+        $query = Almacen::with(['sede'])
+            ->withCount(['inventarios'])
+            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->orderBy('nombre', 'asc');
+
+        // Filtro de estado de cuenta (Activo / Inactivo)
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        // Filtro de papelera (Soft Deletes)
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        } // Si es 'admitidos', no se aplica nada (usa el default de sin trashed)
+
+        // Filtro de Fechas
+        $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
+
+        return $query;
+    }
+
+    #[Computed]
+    public function almacenes()
+    {
+        return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
+    {
+        $this->idEliminar = $id;
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
+    }
+
+    public function ejecutarEliminacion(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-soft')->close();
+    }
+
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
     }
 
     public function eliminar(int $id): void
@@ -73,118 +112,237 @@ new #[Title('Gestión de Almacenes')] class extends Component {
             abort(403, 'No tienes permiso para eliminar almacenes.');
         }
 
-        $alm = Almacen::findOrFail($id);
-        
-        // Block deletion if relations exist (add logic here if needed later)
-        
-        $alm->delete();
-        Flux::toast(variant: 'success', text: __('Almacén eliminado.'));
+        $almacen = Almacen::withTrashed()->findOrFail($id);
+
+        // Prevent deletion if it has relations like inventarios
+        if ($almacen->inventarios()->count() > 0) {
+            Flux::toast(variant: 'danger', text: __('No se puede eliminar el almacén porque tiene inventarios asignados.'));
+            return;
+        }
+
+        if ($almacen->trashed()) {
+            $almacen->forceDelete();
+            Flux::toast(variant: 'success', text: __('Almacén eliminado permanentemente.'));
+        } else {
+            $almacen->delete();
+            Flux::toast(variant: 'success', text: __('Almacén enviado a la papelera (soft delete).'));
+        }
     }
 
-    public function limpiarForm(): void
+    public function restaurar(int $id): void
     {
-        $this->alm_id = null;
-        $this->nombre = '';
-        $this->ubicacion = '';
-        $this->activo = true;
+        if (!auth()->user()->can('almacenes.editar')) {
+            abort(403, 'No tienes permiso para restaurar almacenes.');
+        }
+
+        $almacen = Almacen::withTrashed()->findOrFail($id);
+        $almacen->restore();
+
+        Flux::toast(variant: 'success', text: __('Almacén restaurado correctamente.'));
     }
 
-    #[Computed]
-    public function almacenes()
+    // ── Exportaciones ──────────────────────────────────────────
+
+    public function exportarTodos()
     {
-        return Almacen::with('sede')->orderBy('nombre', 'asc')->get();
+        $query = Almacen::with(['sede'])->orderBy('nombre', 'asc');
+        return Excel::download(new AlmacenesExport($query), 'todos_los_almacenes.xlsx');
     }
 
-    #[Computed]
-    public function sedes()
+    public function exportarFiltrados()
     {
-        return Sede::where('activo', true)->orderBy('nombre')->get();
+        $query = $this->getBaseQuery();
+        return Excel::download(new AlmacenesExport($query), 'almacenes_filtrados.xlsx');
     }
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">{{ __('Gestión de Almacenes') }}</flux:heading>
             <flux:subheading>{{ __('Administra los almacenes físicos y asígnalos a una sede.') }}</flux:subheading>
         </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los almacenes') }}
+                    </flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}
+                    </flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            @can('almacenes.editar')
+                <flux:button variant="primary" icon="plus" href="{{ route('admin.almacenes.create') }}" wire:navigate>
+                    {{ __('Nuevo Almacén') }}
+                </flux:button>
+            @endcan
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        @can('almacenes.editar')
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm h-fit">
-                <flux:heading size="lg">{{ $alm_id ? __('Editar Almacén') : __('Nuevo Almacén') }}</flux:heading>
-                
-                <form wire:submit.prevent="guardar" class="space-y-4">
-                    <flux:select wire:model="sede_id" :label="__('Sede Perteneciente')" required>
-                        @foreach($this->sedes as $sede)
-                            <flux:select.option :value="$sede->id">{{ $sede->nombre }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-
-                    <flux:input wire:model="nombre" :label="__('Nombre del Almacén')" placeholder="Ej. Almacén Principal" required />
-
-                    <flux:input wire:model="ubicacion" :label="__('Ubicación Física')" placeholder="Piso 1, Sección A..." />
-
-                    <flux:checkbox wire:model="activo" :label="__('Almacén activo')" />
-
-                    <div class="flex gap-4 pt-2">
-                        @if($alm_id)
-                            <flux:button variant="ghost" class="flex-1" wire:click.prevent="limpiarForm">{{ __('Cancelar') }}</flux:button>
-                        @endif
-                        <flux:button variant="primary" type="submit" class="flex-1" icon="check">
-                            {{ $alm_id ? __('Actualizar') : __('Guardar') }}
-                        </flux:button>
-                    </div>
-                </form>
+    {{-- Filtros --}}
+    <div
+        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass"
+                    placeholder="{{ __('Buscar por nombre de almacén...') }}" />
             </div>
-        @endcan
+            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+                <option value="todos">{{ __('Todos los estados') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
+        </div>
 
-        <div class="{{ auth()->user()->can('almacenes.editar') ? 'lg:col-span-2' : 'lg:col-span-3' }} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm">
-            <flux:heading size="lg">{{ __('Almacenes Registrados') }}</flux:heading>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
-                            <th class="p-3">{{ __('Nombre') }}</th>
-                            <th class="p-3">{{ __('Sede') }}</th>
-                            <th class="p-3">{{ __('Ubicación') }}</th>
-                            <th class="p-3 text-center">{{ __('Estado') }}</th>
-                            @can('almacenes.editar')
-                                <th class="p-3"></th>
-                            @endcan
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                        @forelse($this->almacenes as $alm)
-                            <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td class="p-3 font-medium text-zinc-900 dark:text-white">{{ $alm->nombre }}</td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">{{ $alm->sede->nombre ?? '-' }}</td>
-                                <td class="p-3 text-zinc-600 dark:text-zinc-400">{{ $alm->ubicacion ?: '-' }}</td>
-                                <td class="p-3 text-center">
-                                    @if($alm->activo)
-                                        <flux:badge color="success">{{ __('Activo') }}</flux:badge>
-                                    @else
-                                        <flux:badge color="zinc">{{ __('Inactivo') }}</flux:badge>
-                                    @endif
-                                </td>
-                                @can('almacenes.editar')
-                                    <td class="p-3 text-right space-x-2">
-                                        <flux:button variant="ghost" icon="pencil-square" size="sm" wire:click.prevent="editar({{ $alm->id }})" />
-                                        <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="eliminar({{ $alm->id }})" wire:confirm="¿Está seguro de eliminar este almacén?" />
-                                    </td>
-                                @endcan
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="{{ auth()->user()->can('almacenes.editar') ? 5 : 4 }}" class="text-center py-8 text-zinc-500">
-                                    {{ __('No hay almacenes registrados.') }}
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
             </div>
         </div>
     </div>
+
+    <!-- Tabla -->
+    <div
+        class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left border-collapse text-sm">
+                <thead>
+                    <tr
+                        class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
+                        <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3">{{ __('Sede') }}</th>
+                        <th class="p-3 text-center">{{ __('Inventarios') }}</th>
+                        <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
+                        @can('almacenes.editar')
+                            <th class="p-3"></th>
+                        @endcan
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    @forelse($this->almacenes as $almacen)
+                        <tr
+                            class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $almacen->trashed() ? 'opacity-50' : '' }}">
+                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                                {{ $almacen->nombre }}
+                                @if($almacen->ubicacion)
+                                    <div class="text-xs text-zinc-500 font-normal">{{ $almacen->ubicacion }}</div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-zinc-600 dark:text-zinc-400">
+                                {{ $almacen->sede->nombre ?? '-' }}
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $almacen->inventarios_count ?? 0 }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($almacen->activo)
+                                    <div class="flex justify-center" title="{{ __('Activo') }}">
+                                        <flux:icon.check-circle class="size-5 text-emerald-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Desactivado') }}">
+                                        <flux:icon.pause-circle class="size-5 text-amber-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $almacen->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($almacen->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminada') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitida') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
+                            @can('almacenes.editar')
+                                <td class="p-3">
+                                    <div class="flex items-center justify-end gap-2">
+                                        @if($almacen->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="restaurar({{ $almacen->id }})"
+                                                wire:confirm="¿Está seguro de restaurar este almacén?" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $almacen->id }}, true)" />
+                                        @else
+                                            <flux:button variant="ghost" icon="pencil-square" size="sm"
+                                                href="{{ route('admin.almacenes.edit', $almacen->id) }}" wire:navigate />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $almacen->id }})" />
+                                        @endif
+                                    </div>
+                                </td>
+                            @endcan
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ auth()->user()->can('almacenes.editar') ? 7 : 6 }}"
+                                class="text-center py-8 text-zinc-500">
+                                {{ __('No hay almacenes registrados que coincidan con tu búsqueda.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        @if($this->almacenes->hasPages())
+            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div class="w-full sm:w-auto">
+                    {{ $this->almacenes->links() }}
+                </div>
+                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                    <span>{{ __('Mostrar') }}</span>
+                    <flux:select wire:model.live="perPage" class="w-20">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
+            </div>
+        @else
+            <div
+                class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span>{{ $this->almacenes->total() }} {{ __('almacén(es) encontrado(s)') }}</span>
+                @if($this->almacenes->total() > 0)
+                    <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
+                        <span>{{ __('Mostrar') }}</span>
+                        <flux:select wire:model.live="perPage" class="w-20">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </flux:select>
+                    </div>
+                @endif
+            </div>
+        @endif
+    </div>
+
+    <!-- Modals de confirmación -->
+    <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
 </div>
