@@ -184,6 +184,16 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->name('lista-precios.edit')
             ->middleware('can:lista-precios.editar');
 
+        Route::livewire('clientes', 'pages::clientes.index')
+            ->name('clientes.index')
+            ->middleware('can:clientes.ver');
+        Route::livewire('clientes/crear', 'pages::clientes.create')
+            ->name('clientes.create')
+            ->middleware('can:clientes.crear');
+        Route::livewire('clientes/{cliente}/editar', 'pages::clientes.edit')
+            ->name('clientes.edit')
+            ->middleware('can:clientes.editar');
+
         Route::livewire('tipos-documento', 'pages::tipos-documento.index')
             ->name('tipos-documento.index')
             ->middleware('can:tipos-documento.ver');

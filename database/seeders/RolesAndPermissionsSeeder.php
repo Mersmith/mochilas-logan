@@ -71,6 +71,11 @@ class RolesAndPermissionsSeeder extends Seeder
             'unidades-medida.editar',
             'lista-precios.ver',
             'lista-precios.editar',
+            // Clientes
+            'clientes.ver',
+            'clientes.crear',
+            'clientes.editar',
+            'clientes.eliminar',
             // Sedes
             'sedes.ver',
             'sedes.crear',
@@ -103,7 +108,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $admin->syncPermissions(Permission::all());
 
-        // ROL: supervisor → Dashboard, Productos (ver/crear/editar), Guías, Kardex, Ventas, Promociones
+        // ROL: supervisor → Dashboard, Productos (ver/crear/editar), Guías, Kardex, Ventas, Promociones, Clientes
         $supervisor = Role::firstOrCreate(['name' => 'supervisor', 'guard_name' => 'web']);
         $supervisor->syncPermissions([
             'panel.acceder',
@@ -118,15 +123,21 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.crear',
             'promociones.ver',
             'promociones.crear',
+            'clientes.ver',
+            'clientes.crear',
+            'clientes.editar',
         ]);
 
-        // ROL: vendedor → Solo POS de ventas y ver productos
+        // ROL: vendedor → Solo POS de ventas, ver productos, y gestionar clientes (ver/crear/editar)
         $vendedor = Role::firstOrCreate(['name' => 'vendedor', 'guard_name' => 'web']);
         $vendedor->syncPermissions([
             'panel.acceder',
             'productos.ver',
             'ventas.ver',
             'ventas.crear',
+            'clientes.ver',
+            'clientes.crear',
+            'clientes.editar',
         ]);
 
         // ROL: almacen → Gestión física: Guías + Kardex

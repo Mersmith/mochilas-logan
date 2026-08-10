@@ -106,7 +106,12 @@
                     </flux:sidebar.group>
 
                     <!-- 3. Comercial y Documentos -->
-                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.proveedores.*') || request()->routeIs('admin.lista-precios.*') || request()->routeIs('admin.tipos-documento.*') || request()->routeIs('admin.series.*')" :heading="__('Comercial y Doc.')" icon="document-text">
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.proveedores.*') || request()->routeIs('admin.clientes.*') || request()->routeIs('admin.lista-precios.*') || request()->routeIs('admin.tipos-documento.*') || request()->routeIs('admin.series.*')" :heading="__('Comercial y Doc.')" icon="document-text">
+                        @can('clientes.ver')
+                            <flux:sidebar.item icon="users" :href="route('admin.clientes.index')" :current="request()->routeIs('admin.clientes.index*') || request()->routeIs('admin.clientes.create*') || request()->routeIs('admin.clientes.edit*')" wire:navigate>
+                                {{ __('Clientes') }}
+                            </flux:sidebar.item>
+                        @endcan
                         @can('proveedores.ver')
                             <flux:sidebar.item icon="truck" :href="route('admin.proveedores.index')" :current="request()->routeIs('admin.proveedores.index*')" wire:navigate>
                                 {{ __('Proveedores') }}

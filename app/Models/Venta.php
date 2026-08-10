@@ -26,6 +26,14 @@ class Venta extends Model
         'tipo_pago',
         'metodo_pago',
         'cupon_id',
+        'direccion_id',
+        'envio_destinatario',
+        'envio_telefono',
+        'envio_direccion',
+        'envio_referencia',
+        'envio_distrito',
+        'envio_provincia',
+        'envio_departamento',
         'comentarios',
     ];
 
@@ -45,6 +53,16 @@ class Venta extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Dirección de envío referenciada al crear la venta.
+     *
+     * @return BelongsTo<Direccion, $this>
+     */
+    public function direccionEnvio(): BelongsTo
+    {
+        return $this->belongsTo(Direccion::class, 'direccion_id');
     }
 
     /**
