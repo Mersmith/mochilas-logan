@@ -1,5 +1,27 @@
-<x-layouts::app.sidebar :title="$title ?? null">
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+
+<head>
+    @include('partials.head')
+    @if(isset($title))
+        <title>{{ $title }} - {{ config('app.name', 'Laravel') }}</title>
+    @endif
+</head>
+
+<body class="min-h-screen bg-white dark:bg-zinc-800">
+    @include('layouts.app.sidebar')
+
     <flux:main>
         {{ $slot }}
     </flux:main>
-</x-layouts::app.sidebar>
+
+    @persist('toast')
+    <flux:toast.group>
+        <flux:toast />
+    </flux:toast.group>
+    @endpersist
+
+    @fluxScripts
+</body>
+
+</html>
