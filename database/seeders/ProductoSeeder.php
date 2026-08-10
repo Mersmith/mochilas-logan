@@ -13,6 +13,7 @@ use App\Models\UnidadMedida;
 use App\Models\Variacion;
 use App\Models\VariacionPrecio;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class ProductoSeeder extends Seeder
 {
@@ -81,5 +82,58 @@ class ProductoSeeder extends Seeder
 
         VariacionPrecio::firstOrCreate(['variacion_id' => $varAzulM->id, 'lista_precio_id' => $listaMenor->id], ['precio' => 120.00, 'simbolo' => 'S/']);
         VariacionPrecio::firstOrCreate(['variacion_id' => $varAzulM->id, 'lista_precio_id' => $listaMayor->id], ['precio' => 95.00, 'simbolo' => 'S/']);
+
+        // --- Generar 49 productos adicionales con imagen default ---
+        $tipos = TipoProducto::all();
+        $marcas = Marca::all();
+        $categorias = Categoria::all();
+
+        $productosAdicionales = Producto::factory(49)
+            ->recycle($tipos)
+            ->recycle($marcas)
+            ->recycle($categorias)
+            ->create();
+
+        $imagePath = public_path('assets/imagen/default.jpg');
+
+        // Asignar imagen al producto Oxford principal
+        if (file_exists($imagePath)) {
+            $prodOxford->addMedia($imagePath)->preservingOriginal()->toMediaCollection('imagen_principal');
+        }
+
+        // Asignar variaciones, precios e imágenes a los 49 productos adicionales
+        foreach ($productosAdicionales as $producto) {
+            if (file_exists($imagePath)) {
+                $producto->addMedia($imagePath)->preservingOriginal()->toMediaCollection('imagen_principal');
+                $producto->addMedia($imagePath)->preservingOriginal()->toMediaCollection('galeria');
+            }
+
+            // Crear 1 variación por producto
+            $variacion = Variacion::firstOrCreate(
+                ['sku' => 'SKU-' . strtoupper(Str::random(6))],
+                [
+                    'producto_id' => $producto->id,
+                    'codigo_barras' => fake()->unique()->ean13(),
+                    'activo' => true
+                ]
+            );
+
+            // Crear precios para la variación
+            VariacionPrecio::firstOrCreate([
+                'variacion_id' => $variacion->id,
+                'lista_precio_id' => $listaMenor->id
+            ], [
+                'precio' => fake()->randomFloat(2, 50, 300),
+                'simbolo' => 'S/'
+            ]);
+
+            VariacionPrecio::firstOrCreate([
+                'variacion_id' => $variacion->id,
+                'lista_precio_id' => $listaMayor->id
+            ], [
+                'precio' => fake()->randomFloat(2, 40, 250),
+                'simbolo' => 'S/'
+            ]);
+        }
     }
 }

@@ -32,5 +32,13 @@ class AlmacenSeeder extends Seeder
                 'activo' => true,
             ]
         );
+        $sedes = Sede::all();
+        if ($sedes->count() > 0) {
+            for ($i = 0; $i < 30; $i++) {
+                Almacen::factory()->create([
+                    'sede_id' => $sedes->random()->id
+                ]);
+            }
+        }
     }
 }

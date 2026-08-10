@@ -29,5 +29,6 @@ class SedeSeeder extends Seeder
                 'updated_by' => 1,
             ]
         );
+        Sede::factory(30)->create();
     }
 }
