@@ -59,6 +59,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
     {
         $query = User::with('roles')
             ->where('is_super_admin', false) // super admin is invisible
+            ->withoutRole('cliente') // <-- Filtro clave para Personal Interno
             ->when($this->search, fn ($q) => $q->where(function ($q) {
                 $q->where('name', 'like', '%'.$this->search.'%')
                     ->orWhere('email', 'like', '%'.$this->search.'%');
@@ -102,7 +103,7 @@ new #[Title('Gestión de Usuarios')] class extends Component {
     #[Computed]
     public function roles()
     {
-        return Role::orderBy('name')->get();
+        return Role::where('name', '!=', 'cliente')->orderBy('name')->get();
     }
 
     /**
@@ -226,8 +227,8 @@ new #[Title('Gestión de Usuarios')] class extends Component {
     {{-- Header --}}
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <flux:heading size="xl">{{ __('Gestión de Usuarios') }}</flux:heading>
-            <flux:subheading>{{ __('Administra los usuarios del sistema y sus roles de acceso.') }}</flux:subheading>
+            <flux:heading size="xl">{{ __('Gestión de Personal Interno') }}</flux:heading>
+            <flux:subheading>{{ __('Administra los accesos de los trabajadores del sistema.') }}</flux:subheading>
         </div>
         <div class="flex flex-wrap items-center gap-2">
             <flux:dropdown>

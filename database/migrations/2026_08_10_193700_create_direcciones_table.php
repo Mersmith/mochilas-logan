@@ -24,12 +24,14 @@ return new class extends Migration
             $table->string('destinatario')->nullable();
             $table->string('telefono_contacto', 15)->nullable();
 
+            $table->foreignId('pais_id')->nullable()->constrained('paises')->onDelete('restrict');
+            $table->foreignId('departamento_id')->nullable()->constrained('ubigeos')->onDelete('restrict');
+            $table->foreignId('provincia_id')->nullable()->constrained('ubigeos')->onDelete('restrict');
+            $table->foreignId('distrito_id')->nullable()->constrained('ubigeos')->onDelete('restrict');
+
             // Dirección completa
             $table->string('direccion');
             $table->string('referencia')->nullable(); // Ej: "Frente al parque", "Piso 3"
-            $table->string('distrito');
-            $table->string('provincia');
-            $table->string('departamento');
             $table->string('codigo_postal', 10)->nullable();
 
             // Solo una dirección puede ser la predeterminada por cliente

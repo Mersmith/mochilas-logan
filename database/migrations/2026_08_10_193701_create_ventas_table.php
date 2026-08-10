@@ -29,6 +29,15 @@ return new class extends Migration
             $table->enum('tipo_pago', ['online', 'contraentrega']);
             $table->string('metodo_pago')->nullable();
 
+            $table->foreignId('direccion_id')->nullable()->constrained('direcciones')->onDelete('set null');
+            $table->string('envio_destinatario')->nullable();
+            $table->string('envio_telefono', 15)->nullable();
+            $table->string('envio_direccion')->nullable();
+            $table->string('envio_referencia')->nullable();
+            $table->string('envio_distrito')->nullable();
+            $table->string('envio_provincia')->nullable();
+            $table->string('envio_departamento')->nullable();
+
             $table->foreignId('cupon_id')->nullable()->constrained('cupons')->onDelete('set null');
             $table->text('comentarios')->nullable();
             $table->timestamps();

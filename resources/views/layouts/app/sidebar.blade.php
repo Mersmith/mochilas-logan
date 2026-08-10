@@ -106,12 +106,7 @@
                     </flux:sidebar.group>
 
                     <!-- 3. Comercial y Documentos -->
-                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.proveedores.*') || request()->routeIs('admin.clientes.*') || request()->routeIs('admin.lista-precios.*') || request()->routeIs('admin.tipos-documento.*') || request()->routeIs('admin.series.*')" :heading="__('Comercial y Doc.')" icon="document-text">
-                        @can('clientes.ver')
-                            <flux:sidebar.item icon="users" :href="route('admin.clientes.index')" :current="request()->routeIs('admin.clientes.index*') || request()->routeIs('admin.clientes.create*') || request()->routeIs('admin.clientes.edit*')" wire:navigate>
-                                {{ __('Clientes') }}
-                            </flux:sidebar.item>
-                        @endcan
+                    <flux:sidebar.group expandable :expanded="request()->routeIs('admin.proveedores.*') || request()->routeIs('admin.lista-precios.*') || request()->routeIs('admin.tipos-documento.*') || request()->routeIs('admin.series.*')" :heading="__('Comercial y Doc.')" icon="document-text">
                         @can('proveedores.ver')
                             <flux:sidebar.item icon="truck" :href="route('admin.proveedores.index')" :current="request()->routeIs('admin.proveedores.index*')" wire:navigate>
                                 {{ __('Proveedores') }}
@@ -134,11 +129,17 @@
                         @endcan
                     </flux:sidebar.group>
                 </flux:sidebar.group>
-                @if(auth()->user()->can('usuarios.ver') || auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
-                    <flux:sidebar.group :heading="__('Seguridad')" class="grid">
+                @if(auth()->user()->can('usuarios.ver') || auth()->user()->can('clientes.ver') || auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
+                    <flux:sidebar.group :heading="__('Usuarios y Accesos')" class="grid">
                         @can('usuarios.ver')
                             <flux:sidebar.item icon="user-group" :href="route('admin.usuarios.index')" :current="request()->routeIs('admin.usuarios.index*')" wire:navigate>
-                                {{ __('Usuarios') }}
+                                {{ __('Personal Interno') }}
+                            </flux:sidebar.item>
+                        @endcan
+
+                        @can('clientes.ver')
+                            <flux:sidebar.item icon="users" :href="route('admin.clientes.index')" :current="request()->routeIs('admin.clientes.index*') || request()->routeIs('admin.clientes.create*') || request()->routeIs('admin.clientes.edit*')" wire:navigate>
+                                {{ __('Clientes') }}
                             </flux:sidebar.item>
                         @endcan
 
