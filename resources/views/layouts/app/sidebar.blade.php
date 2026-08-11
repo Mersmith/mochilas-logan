@@ -6,7 +6,23 @@
     </flux:sidebar.header>
 
     <flux:sidebar.nav>
-        @if(auth()->user()->can('usuarios.ver') || auth()->user()->can('clientes.ver') || auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
+        @if(auth()->user()->hasRole('cliente'))
+            <flux:sidebar.group :heading="__('Mi Cuenta')" class="grid">
+                <flux:sidebar.item icon="user" :href="route('profile.edit')" :current="request()->routeIs('profile.edit')" wire:navigate>
+                    {{ __('Datos Personales') }}
+                </flux:sidebar.item>
+                <flux:sidebar.item icon="map-pin" href="#" wire:navigate>
+                    {{ __('Mis Direcciones') }}
+                </flux:sidebar.item>
+                <flux:sidebar.item icon="shopping-bag" href="#" wire:navigate>
+                    {{ __('Mis Compras') }}
+                </flux:sidebar.item>
+                <flux:sidebar.item icon="heart" href="#" wire:navigate>
+                    {{ __('Favoritos') }}
+                </flux:sidebar.item>
+            </flux:sidebar.group>
+        @else
+            @if(auth()->user()->can('usuarios.ver') || auth()->user()->can('clientes.ver') || auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
             <flux:sidebar.group :heading="__('Sistema')" class="grid">
                 @if(auth()->user()->can('roles.ver') || auth()->user()->can('permisos.ver'))
                     <flux:sidebar.group expandable
@@ -218,6 +234,7 @@
                 @endcan
             </flux:sidebar.group>
         </flux:sidebar.group>
+        @endif
     </flux:sidebar.nav>
 
     <flux:spacer />
