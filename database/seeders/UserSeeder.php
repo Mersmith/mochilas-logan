@@ -48,5 +48,30 @@ class UserSeeder extends Seeder
         foreach ($users as $user) {
             $user->assignRole('admin');
         }
+
+        // ── Cliente específico para pruebas ──────────────────────────
+        $cliente = User::firstOrCreate(
+            ['email' => 'cliente@logan.com'],
+            [
+                'name' => 'Cliente Logan',
+                'password' => bcrypt('password'),
+                'activo' => true,
+                'role' => 'cliente',
+                'email_verified_at' => now(),
+            ]
+        );
+        $cliente->assignRole('cliente');
+
+        // ── Generar 10 clientes aleatorios ─────────────────────
+        $customers = User::factory()->count(10)->create([
+            'password' => bcrypt('password'),
+            'activo' => true,
+            'is_super_admin' => false,
+            'role' => 'cliente',
+        ]);
+
+        foreach ($customers as $customer) {
+            $customer->assignRole('cliente');
+        }
     }
 }

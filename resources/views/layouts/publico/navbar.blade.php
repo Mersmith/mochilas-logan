@@ -10,7 +10,10 @@
         </flux:navbar.item>
     </flux:navbar>
 
-    <flux:spacer />
+    <!-- Search Bar -->
+    <div class="flex-1 flex justify-center px-4 max-w-2xl">
+        <livewire:ecommerce.search-bar />
+    </div>
 
     <!-- Menú de Usuario / Login -->
     <div class="flex items-center gap-4">

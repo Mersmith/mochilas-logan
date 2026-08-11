@@ -220,11 +220,6 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
         </div>
         
         <div class="flex items-center gap-4">
-            <!-- Search bar -->
-            <div class="w-64 sm:w-80">
-                <flux:input wire:model.live.debounce.300ms="search" placeholder="Buscar mochila o modelo..." icon="magnifying-glass" class="w-full bg-white dark:bg-zinc-900" />
-            </div>
-
             <!-- Sort dropdown -->
             <div class="w-48">
                 <flux:select wire:model.live="ordenarPor" class="w-full bg-white dark:bg-zinc-900">

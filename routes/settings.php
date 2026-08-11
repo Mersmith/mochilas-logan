@@ -6,6 +6,11 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
     Route::livewire('settings/profile', 'pages::settings.profile')->name('profile.edit');
+    
+    // Rutas de cliente ("Mi Cuenta")
+    Route::livewire('settings/direcciones', 'pages::settings.direcciones')->name('direcciones');
+    Route::livewire('settings/compras', 'pages::settings.compras')->name('compras');
+    Route::livewire('settings/favoritos', 'pages::settings.favoritos')->name('favoritos');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
