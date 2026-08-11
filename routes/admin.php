@@ -226,6 +226,18 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->name('reportes.skus.index')
             ->middleware('can:productos.ver');
 
+        Route::livewire('reportes/inventario', 'pages::reportes.inventario.index')
+            ->name('reportes.inventario.index')
+            ->middleware('can:kardex.ver');
+
+        Route::livewire('reportes/comercial', 'pages::reportes.comercial.index')
+            ->name('reportes.comercial.index')
+            ->middleware('can:ventas.ver');
+
+        Route::livewire('reportes/clientes', 'pages::reportes.clientes.index')
+            ->name('reportes.clientes.index')
+            ->middleware('can:ventas.ver');
+
         // =============================================
         // SEGURIDAD: Roles y Permisos (admin)
         // =============================================

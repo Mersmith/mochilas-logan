@@ -1,9 +1,11 @@
 <?php
 
 use App\Models\Venta;
+use App\Models\VentaDetalle;
 use App\Models\Inventario;
 use App\Models\Kardex;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
@@ -16,22 +18,73 @@ new #[Title('Dashboard')] class extends Component {
     #[Computed]
     public function kpis(): array
     {
-        $ingresosBrutos = (float)Venta::where('estado_pago', 'pagado')->sum('total');
-        
+        $hoy = Carbon::today();
+        $inicioMesActual = Carbon::now()->startOfMonth();
+        $inicioMesAnterior = Carbon::now()->subMonth()->startOfMonth();
+        $finMesAnterior = Carbon::now()->subMonth()->endOfMonth();
+
+        // Ventas de Hoy
+        $ventasDia = (float)Venta::where('estado_pago', 'pagado')
+            ->whereDate('created_at', $hoy)
+            ->sum('total');
+
+        // Ventas Mes Actual
+        $ventasMesActual = (float)Venta::where('estado_pago', 'pagado')
+            ->whereBetween('created_at', [$inicioMesActual, Carbon::now()->endOfMonth()])
+            ->sum('total');
+
+        // Ventas Mes Anterior
+        $ventasMesAnterior = (float)Venta::where('estado_pago', 'pagado')
+            ->whereBetween('created_at', [$inicioMesAnterior, $finMesAnterior])
+            ->sum('total');
+
+        // Crecimiento Porcentual
+        $crecimiento = 0;
+        if ($ventasMesAnterior > 0) {
+            $crecimiento = (($ventasMesActual - $ventasMesAnterior) / $ventasMesAnterior) * 100;
+        } elseif ($ventasMesActual > 0) {
+            $crecimiento = 100;
+        }
+
+        // Ticket Promedio (Mes Actual)
+        $cantidadVentasMes = Venta::where('estado_pago', 'pagado')
+            ->whereBetween('created_at', [$inicioMesActual, Carbon::now()->endOfMonth()])
+            ->count();
+        $ticketPromedio = $cantidadVentasMes > 0 ? ($ventasMesActual / $cantidadVentasMes) : 0;
+
+        // Stock y Utilidad (Manteniendo lo anterior)
         $cogs = (float)Kardex::where('tipo_transaccion', 'Salida')
             ->where('concepto', 'like', 'Venta %')
             ->sum('costo_total');
-            
         $ingresosNetos = (float)Venta::where('estado_pago', 'pagado')->sum('subtotal');
         $utilidadNeta = $ingresosNetos - $cogs;
-        
         $stockTotal = (int)Inventario::sum('stock_base');
 
         return [
-            'ingresos_brutos' => $ingresosBrutos,
-            'cogs' => $cogs,
+            'ventas_dia' => $ventasDia,
+            'ventas_mes_actual' => $ventasMesActual,
+            'ventas_mes_anterior' => $ventasMesAnterior,
+            'crecimiento' => round($crecimiento, 2),
+            'ticket_promedio' => $ticketPromedio,
             'utilidad_neta' => $utilidadNeta,
             'stock_total' => $stockTotal,
+        ];
+    }
+
+    /**
+     * Get operational alerts.
+     */
+    #[Computed]
+    public function alertasOperativas(): array
+    {
+        $pendientesPago = Venta::where('estado_pago', 'pendiente')->count();
+        $pendientesDespacho = Venta::where('estado_pago', 'pagado')
+            ->whereIn('estado_despacho', ['pendiente', 'preparado'])
+            ->count();
+
+        return [
+            'pendientes_pago' => $pendientesPago,
+            'pendientes_despacho' => $pendientesDespacho,
         ];
     }
 
@@ -70,14 +123,21 @@ new #[Title('Dashboard')] class extends Component {
     }
 
     /**
-     * Get recent completed sales.
+     * Get Top 5 products of the current month.
      */
     #[Computed]
-    public function ventasRecientes()
+    public function top5Productos()
     {
-        return Venta::with(['user', 'tipoDocumento'])
-            ->where('estado_pago', 'pagado')
-            ->orderBy('created_at', 'desc')
+        $inicioMesActual = Carbon::now()->startOfMonth();
+        
+        return VentaDetalle::select('variacion_id', DB::raw('SUM(cantidad) as total_vendido'))
+            ->whereHas('venta', function ($q) use ($inicioMesActual) {
+                $q->where('estado_pago', 'pagado')
+                  ->whereBetween('created_at', [$inicioMesActual, Carbon::now()->endOfMonth()]);
+            })
+            ->with(['variacion.producto'])
+            ->groupBy('variacion_id')
+            ->orderBy('total_vendido', 'desc')
             ->limit(5)
             ->get();
     }
@@ -92,52 +152,74 @@ new #[Title('Dashboard')] class extends Component {
 
     <!-- Tarjetas de KPIs Financieros -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <!-- Ingresos Brutos (Ventas Totales) -->
+        <!-- Ventas del Día -->
         <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl shadow-sm">
             <div class="flex items-center justify-between">
-                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Ingresos Totales (IGV Inc.)') }}</flux:text>
+                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Ventas de Hoy') }}</flux:text>
                 <flux:icon name="banknotes" class="text-zinc-400 size-5" />
             </div>
             <div class="mt-2">
-                <span class="text-3xl font-bold text-zinc-900 dark:text-white">S/ {{ number_format($this->kpis['ingresos_brutos'], 2) }}</span>
+                <span class="text-3xl font-bold text-zinc-900 dark:text-white">S/ {{ number_format($this->kpis['ventas_dia'], 2) }}</span>
             </div>
-            <p class="text-xxs text-zinc-400 mt-1">{{ __('Facturación comercial en ventas procesadas.') }}</p>
+            <p class="text-xxs text-zinc-400 mt-1">{{ __('Recaudación total de ventas procesadas hoy.') }}</p>
         </div>
 
-        <!-- Costo de Venta (COGS) -->
+        <!-- Ventas del Mes vs Anterior -->
         <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl shadow-sm">
             <div class="flex items-center justify-between">
-                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Costo de Mercadería (COGS)') }}</flux:text>
+                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Ventas del Mes') }}</flux:text>
+                <flux:icon name="calendar-days" class="text-zinc-400 size-5" />
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-3xl font-bold text-zinc-900 dark:text-white">S/ {{ number_format($this->kpis['ventas_mes_actual'], 2) }}</span>
+            </div>
+            <div class="mt-1 flex items-center gap-1 text-xxs">
+                @if($this->kpis['crecimiento'] >= 0)
+                    <flux:icon name="arrow-trending-up" class="size-3 text-emerald-500" />
+                    <span class="text-emerald-500 font-medium">+{{ $this->kpis['crecimiento'] }}%</span>
+                @else
+                    <flux:icon name="arrow-trending-down" class="size-3 text-rose-500" />
+                    <span class="text-rose-500 font-medium">{{ $this->kpis['crecimiento'] }}%</span>
+                @endif
+                <span class="text-zinc-400">{{ __('vs mes anterior') }}</span>
+            </div>
+        </div>
+
+        <!-- Ticket Promedio -->
+        <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between">
+                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Ticket Promedio (Mes)') }}</flux:text>
                 <flux:icon name="shopping-bag" class="text-zinc-400 size-5" />
             </div>
             <div class="mt-2">
-                <span class="text-3xl font-bold text-zinc-900 dark:text-white">S/ {{ number_format($this->kpis['cogs'], 2) }}</span>
+                <span class="text-3xl font-bold text-zinc-900 dark:text-white">S/ {{ number_format($this->kpis['ticket_promedio'], 2) }}</span>
             </div>
-            <p class="text-xxs text-zinc-400 mt-1">{{ __('Costo promedio ponderado de Kardex de salida.') }}</p>
+            <p class="text-xxs text-zinc-400 mt-1">{{ __('Gasto promedio por cada venta.') }}</p>
         </div>
 
-        <!-- Utilidad Neta (Ganancia Real) -->
-        <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Utilidad Neta (Ganancia Real)') }}</flux:text>
-                <flux:icon name="currency-dollar" class="text-emerald-500 size-5" />
+        <!-- Alertas Operativas -->
+        <div class="flex flex-col gap-3">
+            <!-- Pendientes de Despacho -->
+            <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 rounded-xl shadow-sm flex items-center justify-between flex-1">
+                <div>
+                    <flux:text size="sm" class="text-amber-700 dark:text-amber-500 font-bold uppercase">{{ __('A Despachar') }}</flux:text>
+                    <p class="text-xxs text-amber-600 dark:text-amber-400 mt-1">{{ __('Pedidos pagados esperando envío.') }}</p>
+                </div>
+                <div class="text-3xl font-black text-amber-600 dark:text-amber-500">
+                    {{ $this->alertasOperativas['pendientes_despacho'] }}
+                </div>
             </div>
-            <div class="mt-2">
-                <span class="text-3xl font-bold text-emerald-600 dark:text-emerald-400">S/ {{ number_format($this->kpis['utilidad_neta'], 2) }}</span>
+            
+            <!-- Pendientes de Pago -->
+            <div class="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 p-4 rounded-xl shadow-sm flex items-center justify-between flex-1">
+                <div>
+                    <flux:text size="sm" class="text-rose-700 dark:text-rose-500 font-bold uppercase">{{ __('Por Pagar') }}</flux:text>
+                    <p class="text-xxs text-rose-600 dark:text-rose-400 mt-1">{{ __('Pedidos en espera de pago.') }}</p>
+                </div>
+                <div class="text-3xl font-black text-rose-600 dark:text-rose-500">
+                    {{ $this->alertasOperativas['pendientes_pago'] }}
+                </div>
             </div>
-            <p class="text-xxs text-zinc-400 mt-1">{{ __('Ingresos Netos (Sin IGV) menos Costo de Mercadería.') }}</p>
-        </div>
-
-        <!-- Stock Físico Total -->
-        <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-6 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-                <flux:text size="sm" class="text-zinc-500 font-semibold uppercase">{{ __('Stock Físico Global') }}</flux:text>
-                <flux:icon name="archive-box" class="text-zinc-400 size-5" />
-            </div>
-            <div class="mt-2">
-                <span class="text-3xl font-bold text-zinc-900 dark:text-white">{{ $this->kpis['stock_total'] }}</span>
-            </div>
-            <p class="text-xxs text-zinc-400 mt-1">{{ __('Unidades base disponibles en todos los almacenes.') }}</p>
         </div>
     </div>
 
@@ -205,26 +287,34 @@ new #[Title('Dashboard')] class extends Component {
 
         <!-- Columna Derecha: Resumen de Ventas Recientes y Distribución de Pagos -->
         <div class="space-y-6">
-            <!-- Tarjeta Ventas Recientes -->
+            <!-- Tarjeta Top 5 Productos -->
             <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm p-6 space-y-4">
-                <flux:heading size="lg">{{ __('Últimas Ventas') }}</flux:heading>
+                <flux:heading size="lg">{{ __('Top 5 Productos del Mes') }}</flux:heading>
                 <div class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    @forelse($this->ventasRecientes as $v)
+                    @forelse($this->top5Productos as $index => $item)
+                        @php
+                            $desc = $item->variacion->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(', ');
+                        @endphp
                         <div class="py-3 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
-                            <div>
-                                <div class="font-semibold text-zinc-900 dark:text-white text-xs">
-                                    {{ $v->tipoDocumento->nombre }} ({{ $v->serie }}-{{ str_pad($v->correlativo, 5, '0', STR_PAD_LEFT) }})
+                            <div class="flex items-center gap-3">
+                                <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
+                                    {{ $index + 1 }}
                                 </div>
-                                <div class="text-xxs text-zinc-500">{{ $v->user->name }}</div>
+                                <div>
+                                    <div class="font-semibold text-zinc-900 dark:text-white text-xs">
+                                        {{ $item->variacion->producto->nombre }}
+                                    </div>
+                                    <div class="text-xxs text-zinc-500">{{ $desc }} (SKU: {{ $item->variacion->sku }})</div>
+                                </div>
                             </div>
                             <div class="text-right">
-                                <div class="font-bold text-zinc-900 dark:text-white text-xs">S/ {{ number_format($v->total, 2) }}</div>
-                                <div class="text-xxs text-zinc-400">{{ $v->created_at->diffForHumans() }}</div>
+                                <div class="font-bold text-zinc-900 dark:text-white text-xs">{{ $item->total_vendido }}</div>
+                                <div class="text-xxs text-zinc-400">{{ __('unidades') }}</div>
                             </div>
                         </div>
                     @empty
                         <div class="text-center py-6 text-zinc-400 text-xs">
-                            {{ __('Aún no se registran ventas.') }}
+                            {{ __('Aún no hay ventas este mes.') }}
                         </div>
                     @endforelse
                 </div>
