@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Proveedor extends Model
 {
@@ -36,7 +37,7 @@ class Proveedor extends Model
         });
 
         static::deleting(function ($model) {
-            if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($model))) {
+            if (in_array(SoftDeletes::class, class_uses_recursive($model))) {
                 if (! $model->isForceDeleting()) {
                     $model->deleted_by = auth()->id();
                     $model->saveQuietly();

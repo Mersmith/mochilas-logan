@@ -193,6 +193,11 @@ new #[Title('Catálogo de Productos')] class extends Component {
         $query = $this->getBaseQuery();
         return Excel::download(new ProductosExport($query), 'productos_filtrados.xlsx');
     }
+
+    public function abrirModalPdf()
+    {
+        $this->modal('modal-exportar-pdf')->show();
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -205,8 +210,10 @@ new #[Title('Catálogo de Productos')] class extends Component {
             <flux:dropdown>
                 <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
                 <flux:menu>
-                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
-                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos (Excel)') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados (Excel)') }}</flux:menu.item>
+                    <flux:menu.separator />
+                    <flux:menu.item wire:click="abrirModalPdf" icon="document-chart-bar">{{ __('Catálogo (PDF)') }}</flux:menu.item>
                 </flux:menu>
             </flux:dropdown>
 
@@ -392,4 +399,22 @@ new #[Title('Catálogo de Productos')] class extends Component {
     <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
         description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
         :isPermanent="true" action="ejecutarEliminacionPermanente" />
+
+    <flux:modal name="modal-exportar-pdf" class="min-w-[22rem]">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Exportar Catálogo a PDF') }}</flux:heading>
+                <flux:subheading>{{ __('Elige el tipo de catálogo que deseas generar. Se descargará como un archivo PDF listo para enviar por WhatsApp.') }}</flux:subheading>
+            </div>
+            
+            <div class="flex flex-col gap-3">
+                <flux:button variant="primary" href="{{ route('admin.productos.exportar-pdf', ['tipo' => 'minorista']) }}" external class="w-full" icon="document-text">
+                    {{ __('Catálogo Público (Retail)') }}
+                </flux:button>
+                <flux:button href="{{ route('admin.productos.exportar-pdf', ['tipo' => 'mayorista']) }}" external class="w-full !bg-amber-500 hover:!bg-amber-600 !text-white border-none" icon="document-text">
+                    {{ __('Catálogo Mayorista (B2B)') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

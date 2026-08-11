@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\Producto;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // =============================================
@@ -29,6 +32,20 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('productos/{producto}/editar', 'pages::productos.edit')
             ->name('productos.edit')
             ->middleware('can:productos.editar');
+
+        Route::get('productos/exportar-catalogo-pdf', function (Request $request) {
+            $tipo = $request->query('tipo', 'minorista'); // minorista o mayorista
+            $productos = Producto::with(['variacions.precios.listaPrecio', 'variacions.valores.atributo'])
+                ->where('activo', true)
+                ->orderBy('nombre')
+                ->get();
+
+            $pdf = Pdf::loadView('pdf.catalogo', compact('productos', 'tipo'));
+            $pdf->setPaper('A4', 'portrait');
+
+            return $pdf->download('catalogo-mochilas-'.$tipo.'.pdf');
+        })->name('productos.exportar-pdf')
+            ->middleware('can:productos.ver');
 
         // Guías de Inventario (almacen, logistica, supervisor, admin)
         Route::livewire('guias', 'pages::guias.index')

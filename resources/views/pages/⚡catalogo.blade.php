@@ -126,13 +126,18 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
             });
         }
 
+        $nombreListaPrecio = 'Precio Menor';
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+        }
+
         // Fetch products and resolve dynamic prices & discounts
-        $products = $query->get()->map(function ($product) {
-            // Get base price (from first variation, list price: "Precio Menor")
+        $products = $query->get()->map(function ($product) use ($nombreListaPrecio) {
+            // Get base price (from first variation, list price based on user type)
             $firstVariation = $product->variacions->first();
             $basePrice = 0.00;
             if ($firstVariation) {
-                $basePrice = (float) ($firstVariation->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+                $basePrice = (float) ($firstVariation->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
             }
             $product->precio_base = $basePrice;
 

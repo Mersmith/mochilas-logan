@@ -110,29 +110,29 @@ class ProductoSeeder extends Seeder
 
             // Crear 1 variación por producto
             $variacion = Variacion::firstOrCreate(
-                ['sku' => 'SKU-' . strtoupper(Str::random(6))],
+                ['sku' => 'SKU-'.strtoupper(Str::random(6))],
                 [
                     'producto_id' => $producto->id,
                     'codigo_barras' => fake()->unique()->ean13(),
-                    'activo' => true
+                    'activo' => true,
                 ]
             );
 
             // Crear precios para la variación
             VariacionPrecio::firstOrCreate([
                 'variacion_id' => $variacion->id,
-                'lista_precio_id' => $listaMenor->id
+                'lista_precio_id' => $listaMenor->id,
             ], [
                 'precio' => fake()->randomFloat(2, 50, 300),
-                'simbolo' => 'S/'
+                'simbolo' => 'S/',
             ]);
 
             VariacionPrecio::firstOrCreate([
                 'variacion_id' => $variacion->id,
-                'lista_precio_id' => $listaMayor->id
+                'lista_precio_id' => $listaMayor->id,
             ], [
                 'precio' => fake()->randomFloat(2, 40, 250),
-                'simbolo' => 'S/'
+                'simbolo' => 'S/',
             ]);
         }
     }

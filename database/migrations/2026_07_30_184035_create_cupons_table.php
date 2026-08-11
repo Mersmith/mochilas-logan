@@ -22,7 +22,7 @@ return new class extends Migration
             $table->date('fecha_inicio')->nullable();
             $table->date('fecha_expiracion')->nullable();
             $table->boolean('activo')->default(true);
-            
+
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();

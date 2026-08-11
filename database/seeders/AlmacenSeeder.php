@@ -36,7 +36,7 @@ class AlmacenSeeder extends Seeder
         if ($sedes->count() > 0) {
             for ($i = 0; $i < 30; $i++) {
                 Almacen::factory()->create([
-                    'sede_id' => $sedes->random()->id
+                    'sede_id' => $sedes->random()->id,
                 ]);
             }
         }

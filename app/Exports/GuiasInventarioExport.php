@@ -3,15 +3,15 @@
 namespace App\Exports;
 
 use Illuminate\Database\Eloquent\Builder;
-use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class GuiasInventarioExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
+class GuiasInventarioExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping, WithStyles
 {
     use Exportable;
 
@@ -46,8 +46,8 @@ class GuiasInventarioExport implements FromQuery, WithHeadings, WithMapping, Sho
 
     public function map($guia): array
     {
-        $origen = $guia->almacenOrigen ? $guia->almacenOrigen->nombre . ' (' . $guia->almacenOrigen->sede->nombre . ')' : '-';
-        $destino = $guia->almacenDestino ? $guia->almacenDestino->nombre . ' (' . $guia->almacenDestino->sede->nombre . ')' : '-';
+        $origen = $guia->almacenOrigen ? $guia->almacenOrigen->nombre.' ('.$guia->almacenOrigen->sede->nombre.')' : '-';
+        $destino = $guia->almacenDestino ? $guia->almacenDestino->nombre.' ('.$guia->almacenDestino->sede->nombre.')' : '-';
 
         return [
             $guia->id,
@@ -55,7 +55,7 @@ class GuiasInventarioExport implements FromQuery, WithHeadings, WithMapping, Sho
             $guia->estado,
             $guia->fecha_movimiento ? $guia->fecha_movimiento->format('Y-m-d') : '-',
             $guia->tipoDocumento ? $guia->tipoDocumento->nombre : '-',
-            $guia->serie . '-' . str_pad($guia->correlativo, 6, '0', STR_PAD_LEFT),
+            $guia->serie.'-'.str_pad($guia->correlativo, 6, '0', STR_PAD_LEFT),
             $origen,
             $destino,
             $guia->proveedor ? $guia->proveedor->razon_social : '-',
@@ -67,7 +67,7 @@ class GuiasInventarioExport implements FromQuery, WithHeadings, WithMapping, Sho
     public function styles(Worksheet $sheet)
     {
         return [
-            1    => ['font' => ['bold' => true]],
+            1 => ['font' => ['bold' => true]],
         ];
     }
 }

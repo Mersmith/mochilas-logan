@@ -14,6 +14,7 @@ class MarcasExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMappi
     use Exportable;
 
     protected Builder $query;
+
     protected int $rowCount = 0;
 
     public function __construct(Builder $query)

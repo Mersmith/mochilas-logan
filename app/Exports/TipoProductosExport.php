@@ -14,6 +14,7 @@ class TipoProductosExport implements FromQuery, ShouldAutoSize, WithHeadings, Wi
     use Exportable;
 
     protected Builder $query;
+
     protected int $rowCount = 0;
 
     public function __construct(Builder $query)

@@ -31,6 +31,7 @@ class UserSeeder extends Seeder
                 'name' => 'Administrador Logan',
                 'password' => bcrypt('password'),
                 'activo' => true,
+                'role' => 'admin',
                 'email_verified_at' => now(),
             ]
         );
@@ -41,6 +42,7 @@ class UserSeeder extends Seeder
             'password' => bcrypt('password'),
             'activo' => true,
             'is_super_admin' => false,
+            'role' => 'admin',
         ]);
 
         foreach ($users as $user) {

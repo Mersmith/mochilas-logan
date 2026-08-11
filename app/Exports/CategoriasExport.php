@@ -14,6 +14,7 @@ class CategoriasExport implements FromQuery, ShouldAutoSize, WithHeadings, WithM
     use Exportable;
 
     protected Builder $query;
+
     protected int $rowCount = 0;
 
     public function __construct(Builder $query)

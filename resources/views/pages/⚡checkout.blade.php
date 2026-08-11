@@ -50,6 +50,10 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
         if ($firstSede) {
             $this->sedeRecojo = $firstSede->id;
         }
+
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $this->metodoPago = 'coordinar';
+        }
     }
 
     /**
@@ -61,6 +65,11 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
         $cart = session()->get('public_cart', []);
         $items = [];
 
+        $nombreListaPrecio = 'Precio Menor';
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+        }
+
         foreach ($cart as $key => $item) {
             $variacion = Variacion::with(['producto.marca', 'producto.descuentos', 'valores.atributo', 'precios.listaPrecio', 'inventarios'])
                 ->find($item['variacion_id']);
@@ -70,7 +79,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
             }
 
             $stock = (int) $variacion->inventarios->sum('stock_base');
-            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
 
             $activeDiscount = $variacion->producto->descuentos
                 ->where('activo', true)
@@ -390,22 +399,32 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
             <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
                 <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Medio de pago') }}</flux:heading>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button wire:click.prevent="$set('metodoPago', 'transferencia')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                        <flux:icon name="building-library" class="size-6 mx-auto mb-2 {{ $metodoPago === 'transferencia' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                        <div class="text-xs font-bold {{ $metodoPago === 'transferencia' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Transferencia') }}</div>
-                    </button>
+                @if(auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista')
+                    <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl flex items-start gap-3">
+                        <flux:icon name="exclamation-circle" class="size-5 text-amber-600 mt-0.5" />
+                        <div>
+                            <div class="text-sm font-bold text-amber-800 dark:text-amber-500">{{ __('Pedido B2B Mayorista') }}</div>
+                            <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">{{ __('Tu pedido se registrará como "Pendiente de Pago". Nos comunicaremos contigo para coordinar el abono o transferencia por el total con descuento mayorista.') }}</div>
+                        </div>
+                    </div>
+                @else
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button wire:click.prevent="$set('metodoPago', 'transferencia')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="building-library" class="size-6 mx-auto mb-2 {{ $metodoPago === 'transferencia' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div class="text-xs font-bold {{ $metodoPago === 'transferencia' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Transferencia') }}</div>
+                        </button>
 
-                    <button wire:click.prevent="$set('metodoPago', 'tarjeta')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'tarjeta' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                        <flux:icon name="credit-card" class="size-6 mx-auto mb-2 {{ $metodoPago === 'tarjeta' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                        <div class="text-xs font-bold {{ $metodoPago === 'tarjeta' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Tarjeta') }}</div>
-                    </button>
+                        <button wire:click.prevent="$set('metodoPago', 'tarjeta')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'tarjeta' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="credit-card" class="size-6 mx-auto mb-2 {{ $metodoPago === 'tarjeta' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div class="text-xs font-bold {{ $metodoPago === 'tarjeta' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Tarjeta') }}</div>
+                        </button>
 
-                    <button wire:click.prevent="$set('metodoPago', 'yape_plin')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'yape_plin' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                        <flux:icon name="device-phone-mobile" class="size-6 mx-auto mb-2 {{ $metodoPago === 'yape_plin' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                        <div class="text-xs font-bold {{ $metodoPago === 'yape_plin' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Yape / Plin') }}</div>
-                    </button>
-                </div>
+                        <button wire:click.prevent="$set('metodoPago', 'yape_plin')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'yape_plin' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="device-phone-mobile" class="size-6 mx-auto mb-2 {{ $metodoPago === 'yape_plin' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div class="text-xs font-bold {{ $metodoPago === 'yape_plin' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Yape / Plin') }}</div>
+                        </button>
+                    </div>
+                @endif
             </div>
 
             <!-- Sección 3: Productos en tu pedido (resumen compacto) -->
@@ -493,7 +512,9 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
                 <!-- Pay Button -->
                 <flux:button variant="primary" wire:click.prevent="confirmarCompra" class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
-                    <span wire:loading.remove wire:target="confirmarCompra">{{ __('Pagar ahora') }}</span>
+                    <span wire:loading.remove wire:target="confirmarCompra">
+                        {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
+                    </span>
                     <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
                 </flux:button>
 

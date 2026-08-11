@@ -2,7 +2,6 @@
 
 namespace App\Exports;
 
-use App\Models\Cupon;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -44,8 +43,8 @@ class CuponesExport implements FromCollection, WithHeadings, WithMapping
             $cupon->id,
             $cupon->codigo,
             ucfirst($cupon->tipo_descuento),
-            $cupon->tipo_descuento === 'porcentaje' ? $cupon->valor_descuento . '%' : '$' . $cupon->valor_descuento,
-            '$' . $cupon->monto_minimo_compra,
+            $cupon->tipo_descuento === 'porcentaje' ? $cupon->valor_descuento.'%' : '$'.$cupon->valor_descuento,
+            '$'.$cupon->monto_minimo_compra,
             $cupon->usos_totales,
             $cupon->usos_restantes,
             $cupon->fecha_expiracion ? $cupon->fecha_expiracion->format('Y-m-d') : 'Sin expiración',

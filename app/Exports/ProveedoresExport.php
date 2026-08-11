@@ -3,15 +3,15 @@
 namespace App\Exports;
 
 use Illuminate\Database\Eloquent\Builder;
-use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\Exportable;
+use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class ProveedoresExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
+class ProveedoresExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping, WithStyles
 {
     use Exportable;
 
@@ -60,7 +60,7 @@ class ProveedoresExport implements FromQuery, WithHeadings, WithMapping, ShouldA
     public function styles(Worksheet $sheet)
     {
         return [
-            1    => ['font' => ['bold' => true]],
+            1 => ['font' => ['bold' => true]],
         ];
     }
 }

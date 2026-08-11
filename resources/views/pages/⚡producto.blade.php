@@ -115,8 +115,13 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
             return;
         }
 
+        $nombreListaPrecio = 'Precio Menor';
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+        }
+
         // Calculate pricing
-        $basePrice = (float) ($variation->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+        $basePrice = (float) ($variation->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
         $activeDiscount = $this->producto->descuentos->first();
         if ($activeDiscount) {
             $pct = (int) $activeDiscount->porcentaje_descuento;
@@ -261,16 +266,21 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
 
             <!-- Precios y Stock -->
             @php
+                $nombreListaPrecio = 'Precio Menor';
+                if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+                    $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+                }
+
                 $var = $this->selectedVariation;
                 $stock = $var ? (int) $var->inventarios->sum('stock_base') : 0;
                 
                 $basePrice = 0.00;
                 if ($var) {
-                    $basePrice = (float) ($var->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+                    $basePrice = (float) ($var->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
                 } else {
                     $firstVar = $producto->variacions->first();
                     if ($firstVar) {
-                        $basePrice = (float) ($firstVar->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+                        $basePrice = (float) ($firstVar->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
                     }
                 }
 

@@ -18,6 +18,11 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
         $cart = session()->get('public_cart', []);
         $items = [];
 
+        $nombreListaPrecio = 'Precio Menor';
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+        }
+
         foreach ($cart as $key => $item) {
             $variacion = Variacion::with(['producto.marca', 'producto.categoria', 'producto.descuentos', 'valores.atributo', 'precios.listaPrecio', 'inventarios'])
                 ->find($item['variacion_id']);
@@ -27,7 +32,7 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
             }
 
             $stock = (int) $variacion->inventarios->sum('stock_base');
-            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00);
+            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
             
             // Check active discount
             $activeDiscount = $variacion->producto->descuentos

@@ -14,6 +14,7 @@ class TipoDocumentosExport implements FromQuery, ShouldAutoSize, WithHeadings, W
     use Exportable;
 
     protected Builder $query;
+
     protected int $rowCount = 0;
 
     public function __construct(Builder $query)

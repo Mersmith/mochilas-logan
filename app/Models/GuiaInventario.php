@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class GuiaInventario extends Model
 {
@@ -50,7 +51,7 @@ class GuiaInventario extends Model
         });
 
         static::deleting(function ($model) {
-            if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($model))) {
+            if (in_array(SoftDeletes::class, class_uses_recursive($model))) {
                 if (! $model->isForceDeleting()) {
                     $model->deleted_by = auth()->id();
                     $model->saveQuietly();

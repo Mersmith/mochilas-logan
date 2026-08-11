@@ -2,7 +2,6 @@
 
 namespace App\Exports;
 
-use App\Models\Descuento;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -40,7 +39,7 @@ class DescuentosExport implements FromCollection, WithHeadings, WithMapping
         return [
             $descuento->id,
             $descuento->nombre,
-            $descuento->porcentaje_descuento . '%',
+            $descuento->porcentaje_descuento.'%',
             $descuento->fecha_inicio ? $descuento->fecha_inicio->format('Y-m-d H:i') : 'N/A',
             $descuento->fecha_fin ? $descuento->fecha_fin->format('Y-m-d H:i') : 'N/A',
             $descuento->activo ? 'Activo' : 'Inactivo',
