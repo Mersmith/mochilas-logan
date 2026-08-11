@@ -26,7 +26,6 @@ new #[Title('Kardex Valorizado')] class extends Component {
     public string $desde = '';
 
     #[Url]
-    #[Url]
     public string $hasta = '';
 
     #[Url]

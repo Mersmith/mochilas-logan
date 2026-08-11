@@ -82,8 +82,27 @@ new #[Title('Editar Guía de Inventario')] class extends Component {
         });
     }
 
+    public function updatedDetalleVariacionId()
+    {
+        $this->detalle_unidad_medida_id = null;
+    }
+
     public function getUnidadesMedidaProperty()
     {
+        if ($this->detalle_variacion_id) {
+            $variacion = Variacion::with('producto.empaques.unidadMedida')->find($this->detalle_variacion_id);
+            
+            // Siempre incluimos la unidad base por defecto (ej. UND)
+            $unidades = collect([UnidadMedida::where('abreviacion', 'UND')->first() ?? UnidadMedida::first()]);
+
+            if ($variacion && $variacion->producto && $variacion->producto->empaques->count() > 0) {
+                $empaques = $variacion->producto->empaques->map(fn($e) => $e->unidadMedida)->filter();
+                $unidades = $unidades->merge($empaques);
+            }
+            
+            return $unidades->unique('id');
+        }
+        
         return UnidadMedida::where('activo', true)->get();
     }
 
@@ -106,9 +125,12 @@ new #[Title('Editar Guía de Inventario')] class extends Component {
 
         $this->validate($rules);
 
-        // Validar que no se agregue la misma variación dos veces
-        if ($this->guia->detalles()->where('variacion_id', $this->detalle_variacion_id)->exists()) {
-            Flux::toast(variant: 'danger', text: 'Esta variación ya ha sido agregada a la guía.');
+        // Validar que no se agregue la misma variación con la misma unidad de medida
+        if ($this->guia->detalles()
+            ->where('variacion_id', $this->detalle_variacion_id)
+            ->where('unidad_medida_id', $this->detalle_unidad_medida_id)
+            ->exists()) {
+            Flux::toast(variant: 'danger', text: 'Esta variación con esta unidad de medida ya ha sido agregada a la guía.');
             return;
         }
 
@@ -480,7 +502,7 @@ new #[Title('Editar Guía de Inventario')] class extends Component {
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                         <flux:field class="md:col-span-6">
                             <flux:label>{{ __('Producto / Variación') }}</flux:label>
-                            <flux:select wire:model="detalle_variacion_id" placeholder="Seleccione Variación...">
+                            <flux:select wire:model.live="detalle_variacion_id" placeholder="Seleccione Variación...">
                                 <option value="">{{ __('Seleccione...') }}</option>
                                 @foreach($this->variaciones as $var)
                                     <option value="{{ $var['id'] }}">{{ $var['nombre'] }}</option>
