@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\Producto;
+use App\Models\TipoProducto;
+use App\Models\Marca;
+use App\Models\Categoria;
 use App\Exports\ProductosExport;
 use Livewire\Component;
 use Livewire\Attributes\Title;
@@ -23,6 +26,21 @@ new #[Title('Catálogo de Productos')] class extends Component {
     public string $filtroPapelera = 'admitidos';
 
     #[Url]
+    public string $filtroTipo = '';
+
+    #[Url]
+    public string $filtroMarca = '';
+
+    #[Url]
+    public string $filtroCategoria = '';
+
+    #[Url]
+    public string $filtroEmpaque = '';
+
+    #[Url]
+    public string $filtroDescuento = '';
+
+    #[Url]
     public string $desde = '';
 
     #[Url]
@@ -33,14 +51,14 @@ new #[Title('Catálogo de Productos')] class extends Component {
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage', 'filtroTipo', 'filtroMarca', 'filtroCategoria', 'filtroEmpaque', 'filtroDescuento'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'filtroTipo', 'filtroMarca', 'filtroCategoria', 'filtroEmpaque', 'filtroDescuento']);
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -68,6 +86,26 @@ new #[Title('Catálogo de Productos')] class extends Component {
         $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
             ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
 
+        if ($this->filtroTipo) {
+            $query->where('tipo_producto_id', $this->filtroTipo);
+        }
+        if ($this->filtroMarca) {
+            $query->where('marca_id', $this->filtroMarca);
+        }
+        if ($this->filtroCategoria) {
+            $query->where('categoria_id', $this->filtroCategoria);
+        }
+        if ($this->filtroEmpaque === 'si') {
+            $query->has('empaques');
+        } elseif ($this->filtroEmpaque === 'no') {
+            $query->doesntHave('empaques');
+        }
+        if ($this->filtroDescuento === 'si') {
+            $query->has('descuentos');
+        } elseif ($this->filtroDescuento === 'no') {
+            $query->doesntHave('descuentos');
+        }
+
         return $query;
     }
 
@@ -75,6 +113,24 @@ new #[Title('Catálogo de Productos')] class extends Component {
     public function productos()
     {
         return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function tiposProducto()
+    {
+        return TipoProducto::orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function marcas()
+    {
+        return Marca::orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function categorias()
+    {
+        return Categoria::orderBy('nombre')->get();
     }
 
     public ?int $idEliminar = null;
@@ -180,13 +236,44 @@ new #[Title('Catálogo de Productos')] class extends Component {
             </flux:select>
         </div>
 
-        <div class="flex flex-col sm:flex-row items-end gap-3">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
-                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+        <div class="flex flex-col sm:flex-row gap-3">
+            <flux:select wire:model.live="filtroTipo" class="flex-1">
+                <option value="">{{ __('Todos los Tipos') }}</option>
+                @foreach($this->tiposProducto as $tipo)
+                    <option value="{{ $tipo->id }}">{{ $tipo->nombre }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="filtroMarca" class="flex-1">
+                <option value="">{{ __('Todas las Marcas') }}</option>
+                @foreach($this->marcas as $marca)
+                    <option value="{{ $marca->id }}">{{ $marca->nombre }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="filtroCategoria" class="flex-1">
+                <option value="">{{ __('Todas las Categorías') }}</option>
+                @foreach($this->categorias as $categoria)
+                    <option value="{{ $categoria->id }}">{{ $categoria->nombre }}</option>
+                @endforeach
+            </flux:select>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-end gap-3 justify-between">
+            <div class="flex flex-col md:flex-row gap-3 flex-1 w-full">
+                <flux:select wire:model.live="filtroEmpaque" class="w-full md:w-44">
+                    <option value="">{{ __('Empaques: Todos') }}</option>
+                    <option value="si">{{ __('Con empaque') }}</option>
+                    <option value="no">{{ __('Sin empaque') }}</option>
+                </flux:select>
+                <flux:select wire:model.live="filtroDescuento" class="w-full md:w-44">
+                    <option value="">{{ __('Descuento: Todos') }}</option>
+                    <option value="si">{{ __('Con descuento') }}</option>
+                    <option value="no">{{ __('Sin descuento') }}</option>
+                </flux:select>
+                <flux:input wire:model.live="desde" type="date" class="w-full md:w-40" />
+                <flux:input wire:model.live="hasta" type="date" class="w-full md:w-40" />
             </div>
-            <div class="flex-1 sm:text-right">
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+            <div class="mt-4 sm:mt-0 w-full sm:w-auto text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path">
                     {{ __('Limpiar Filtros') }}
                 </flux:button>
             </div>

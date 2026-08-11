@@ -4,6 +4,7 @@ use App\Models\Producto;
 use App\Models\Categoria;
 use App\Models\Marca;
 use App\Models\Descuento;
+use App\Models\Atributo;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
@@ -19,6 +20,9 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
 
     #[Url(as: 'marca')]
     public array $selectedMarcas = [];
+
+    #[Url(as: 'atributos')]
+    public array $selectedAtributos = [];
 
     #[Url(as: 'precio_min')]
     public ?float $precioMin = null;
@@ -40,6 +44,7 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
     {
         $this->selectedCategoria = null;
         $this->selectedMarcas = [];
+        $this->selectedAtributos = [];
         $this->precioMin = null;
         $this->precioMax = null;
         $this->ordenarPor = 'recomendados';
@@ -69,6 +74,17 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
     }
 
     /**
+     * Computed dynamic attributes and values.
+     */
+    #[Computed]
+    public function atributosFiltro()
+    {
+        return Atributo::with(['valores' => function($q) {
+            $q->whereHas('variacions.producto', fn($pq) => $pq->where('activo', true));
+        }])->where('activo', true)->get();
+    }
+
+    /**
      * Computed products listing with filters and pricing logic applied.
      */
     #[Computed]
@@ -93,6 +109,13 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
         // Filter by Brands
         if (!empty($this->selectedMarcas)) {
             $query->whereIn('marca_id', $this->selectedMarcas);
+        }
+
+        // Filter by Attributes
+        if (!empty($this->selectedAtributos)) {
+            $query->whereHas('variacions.valores', function ($q) {
+                $q->whereIn('atributo_valores.id', $this->selectedAtributos);
+            });
         }
 
         // Filter by Search Query
@@ -233,6 +256,28 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
                     @endforeach
                 </div>
             </div>
+
+            <!-- Filtro de Atributos Dinámicos (Colores, Tallas, etc) -->
+            @foreach($this->atributosFiltro as $attr)
+                @if($attr->valores->count() > 0)
+                    <div class="space-y-3">
+                        <flux:text size="sm" class="font-bold text-zinc-900 dark:text-white uppercase tracking-wider">{{ $attr->nombre }}</flux:text>
+                        <div class="space-y-2">
+                            @foreach($attr->valores as $val)
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="attr-{{ $val->id }}" value="{{ $val->id }}" wire:model.live="selectedAtributos" class="rounded border-zinc-300 dark:border-zinc-700 text-black focus:ring-black dark:focus:ring-white size-4" />
+                                    <label for="attr-{{ $val->id }}" class="text-xs text-zinc-600 dark:text-zinc-400 font-medium select-none cursor-pointer flex items-center gap-2 w-full">
+                                        @if(strtolower(trim($attr->nombre)) === 'color' && $val->codigo_color_hex)
+                                            <span class="size-3.5 rounded-full border border-zinc-300 shadow-sm" style="background-color: {{ $val->codigo_color_hex }}"></span>
+                                        @endif
+                                        <span>{{ $val->valor }}</span>
+                                    </label>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+            @endforeach
 
             <!-- Rango de Precios -->
             <div class="space-y-3">

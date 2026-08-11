@@ -104,7 +104,7 @@
         <flux:sidebar.group :heading="__('Comercio')" class="grid">
             <!-- Logística -->
             <flux:sidebar.group expandable
-                :expanded="request()->routeIs('admin.productos.*') || request()->routeIs('admin.guias.*') || request()->routeIs('admin.kardex.*') || request()->routeIs('admin.tipos-producto.*') || request()->routeIs('admin.categorias.*') || request()->routeIs('admin.marcas.*') || request()->routeIs('admin.atributos.*') || request()->routeIs('admin.unidades-medida.*')"
+                :expanded="request()->routeIs('admin.productos.*') || request()->routeIs('admin.guias.*') || request()->routeIs('admin.kardex.*') || request()->routeIs('admin.inventario.*') || request()->routeIs('admin.tipos-producto.*') || request()->routeIs('admin.categorias.*') || request()->routeIs('admin.marcas.*') || request()->routeIs('admin.atributos.*') || request()->routeIs('admin.unidades-medida.*')"
                 :heading="__('Logística')" icon="truck">
 
                 <flux:sidebar.group expandable
@@ -162,6 +162,11 @@
                         :current="request()->routeIs('admin.kardex.index*')" wire:navigate>
                         {{ __('Kardex Valorizado') }}
                     </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="squares-plus" :href="route('admin.inventario.index')"
+                        :current="request()->routeIs('admin.inventario.index*')" wire:navigate>
+                        {{ __('Control de Inventario') }}
+                    </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>
 
@@ -202,6 +207,13 @@
                     <flux:sidebar.item icon="presentation-chart-line" :href="route('admin.dashboard')"
                         :current="request()->routeIs('admin.dashboard')" wire:navigate>
                         {{ __('Ventas') }}
+                    </flux:sidebar.item>
+                @endcan
+
+                @can('productos.ver')
+                    <flux:sidebar.item icon="queue-list" :href="route('admin.reportes.skus.index')"
+                        :current="request()->routeIs('admin.reportes.skus.index*')" wire:navigate>
+                        {{ __('Catálogo de SKUs') }}
                     </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>

@@ -49,6 +49,11 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->name('kardex.index')
             ->middleware('can:kardex.ver');
 
+        // Inventario (control de stock por SKU)
+        Route::livewire('inventario', 'pages::inventario.index')
+            ->name('inventario.index')
+            ->middleware('can:kardex.ver');
+
         // =============================================
         // PUNTO DE VENTA
         // =============================================
@@ -213,6 +218,13 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('series/{serie}/editar', 'pages::series.edit')
             ->name('series.edit')
             ->middleware('can:series.editar');
+
+        // =============================================
+        // ANALÍTICA Y REPORTES
+        // =============================================
+        Route::livewire('reportes/skus', 'pages::reportes.skus.index')
+            ->name('reportes.skus.index')
+            ->middleware('can:productos.ver');
 
         // =============================================
         // SEGURIDAD: Roles y Permisos (admin)
