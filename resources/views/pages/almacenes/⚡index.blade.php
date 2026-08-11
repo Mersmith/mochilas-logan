@@ -21,6 +21,9 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     public string $filtroEstado = 'todos'; // activos | desactivados | todos
 
     #[Url]
+    public string $sede_id = '';
+
+    #[Url]
     public string $filtroPapelera = 'admitidos'; // admitidos | eliminados | todos
 
     #[Url]
@@ -37,14 +40,14 @@ new #[Title('Gestión de Almacenes')] class extends Component {
      */
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroEstado', 'sede_id', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroEstado', 'sede_id', 'filtroPapelera', 'desde', 'hasta']);
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -56,7 +59,13 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     {
         $query = Almacen::with(['sede'])
             ->withCount(['inventarios'])
-            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->when($this->search, function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('nombre', 'like', '%' . $this->search . '%')
+                        ->orWhere('ubicacion', 'like', '%' . $this->search . '%');
+                });
+            })
+            ->when($this->sede_id, fn($q) => $q->where('sede_id', $this->sede_id))
             ->orderBy('nombre', 'asc');
 
         // Filtro de estado de cuenta (Activo / Inactivo)
@@ -84,6 +93,12 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     public function almacenes()
     {
         return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function sedes()
+    {
+        return \App\Models\Sede::where('activo', true)->orderBy('nombre')->get();
     }
 
     public ?int $idEliminar = null;
@@ -188,8 +203,14 @@ new #[Title('Gestión de Almacenes')] class extends Component {
         <div class="flex flex-col sm:flex-row gap-3">
             <div class="flex-1">
                 <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass"
-                    placeholder="{{ __('Buscar por nombre de almacén...') }}" />
+                    placeholder="{{ __('Buscar por nombre o ubicación...') }}" />
             </div>
+            <flux:select wire:model.live="sede_id" class="sm:w-44">
+                <option value="">{{ __('Todas las Sedes') }}</option>
+                @foreach($this->sedes as $s)
+                    <option value="{{ $s->id }}">{{ $s->nombre }}</option>
+                @endforeach
+            </flux:select>
             <flux:select wire:model.live="filtroEstado" class="sm:w-44">
                 <option value="todos">{{ __('Todos los estados') }}</option>
                 <option value="activos">{{ __('Activos') }}</option>

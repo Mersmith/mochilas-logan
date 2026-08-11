@@ -11,6 +11,23 @@ new #[Title('Kardex Valorizado')] class extends Component {
     public ?int $almacen_id = null;
     public ?int $variacion_id = null;
 
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $tipo_transaccion = 'todos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
+    public function resetFiltros()
+    {
+        $this->reset(['search', 'tipo_transaccion', 'desde', 'hasta']);
+    }
+
     /**
      * Mount the component.
      */
@@ -40,6 +57,10 @@ new #[Title('Kardex Valorizado')] class extends Component {
         return Kardex::with(['origenDocumento'])
             ->where('almacen_id', $this->almacen_id)
             ->where('variacion_id', $this->variacion_id)
+            ->when($this->search, fn($q) => $q->where('concepto', 'like', '%' . $this->search . '%'))
+            ->when($this->tipo_transaccion !== 'todos', fn($q) => $q->where('tipo_transaccion', $this->tipo_transaccion))
+            ->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta))
             ->orderBy('created_at', 'desc')
             ->get();
     }
@@ -163,8 +184,20 @@ new #[Title('Kardex Valorizado')] class extends Component {
 
     <!-- Tabla Histórica (Tailwind para compatibilidad con Flux Free) -->
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden shadow-sm">
-        <div class="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30">
+        <div class="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 flex flex-col md:flex-row gap-4 items-center justify-between">
             <flux:heading size="lg">{{ __('Historial de Transacciones') }}</flux:heading>
+            
+            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar concepto...') }}" class="w-full sm:w-48" />
+                <flux:select wire:model.live="tipo_transaccion" class="w-full sm:w-32">
+                    <option value="todos">{{ __('Todos') }}</option>
+                    <option value="Entrada">{{ __('Entradas') }}</option>
+                    <option value="Salida">{{ __('Salidas') }}</option>
+                </flux:select>
+                <flux:input wire:model.live="desde" type="date" class="w-full sm:w-36" />
+                <flux:input wire:model.live="hasta" type="date" class="w-full sm:w-36" />
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path" />
+            </div>
         </div>
 
         <div class="overflow-x-auto">

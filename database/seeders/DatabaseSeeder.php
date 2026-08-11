@@ -16,8 +16,11 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             UserSeeder::class,
 
-                // 1. Organización
-            SedeSeeder::class,
+            UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
+            ClienteSeeder::class,       // Crea clientes demo con direcciones en Lima
+
+            // 1. Organización
+            /*SedeSeeder::class,
             AlmacenSeeder::class,
 
                 // 2. Catálogos base
@@ -36,14 +39,12 @@ class DatabaseSeeder extends Seeder
             ProveedorSeeder::class,
 
                 // 5. Geografía (Paises → Ubigeos → Clientes)
-            UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
-            ClienteSeeder::class,       // Crea clientes demo con direcciones en Lima
 
                 // 6. Entidades complejas
             ProductoSeeder::class,
 
                 // 7. Transacciones iniciales
-            GuiaInventarioSeeder::class,
+            GuiaInventarioSeeder::class,*/
         ]);
     }
 }

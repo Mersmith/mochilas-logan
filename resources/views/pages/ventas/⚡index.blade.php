@@ -17,15 +17,37 @@ use Flux\Flux;
 new #[Title('Historial de Ventas')] class extends Component {
     use WithPagination;
 
+    #[Url(as: 'q')]
     public string $search = '';
+
+    #[Url]
+    public string $estado_pago = 'todos';
+
+    #[Url]
+    public string $estado_despacho = 'todos';
+
+    #[Url]
+    public string $desde = '';
+
+    #[Url]
+    public string $hasta = '';
+
     public ?int $selectedVentaId = null;
     public bool $showDetailModal = false;
 
     /**
      * Reset pagination on search change.
      */
-    public function updatedSearch(): void
+    public function updating($property)
     {
+        if (in_array($property, ['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta'])) {
+            $this->resetPage();
+        }
+    }
+
+    public function resetFiltros()
+    {
+        $this->reset(['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta']);
         $this->resetPage();
     }
 
@@ -43,6 +65,10 @@ new #[Title('Historial de Ventas')] class extends Component {
                           $q->where('name', 'like', '%' . $this->search . '%');
                       });
             })
+            ->when($this->estado_pago !== 'todos', fn($q) => $q->where('estado_pago', $this->estado_pago))
+            ->when($this->estado_despacho !== 'todos', fn($q) => $q->where('estado_despacho', $this->estado_despacho))
+            ->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
+            ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta))
             ->orderBy('created_at', 'desc')
             ->orderBy('correlativo', 'desc')
             ->paginate(10);
@@ -156,9 +182,40 @@ new #[Title('Historial de Ventas')] class extends Component {
     </div>
 
     <!-- Filtros -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700">
-        <div class="w-full sm:w-80">
-            <flux:input wire:model.live="search" placeholder="Buscar por cliente o comprobante..." icon="magnifying-glass" />
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm mb-6 space-y-4">
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar serie, correlativo o cliente...') }}" />
+            </div>
+            
+            <flux:select wire:model.live="estado_pago" class="sm:w-44">
+                <option value="todos">{{ __('Estado Pago') }}</option>
+                <option value="pendiente">{{ __('Pendiente') }}</option>
+                <option value="pagado">{{ __('Pagado') }}</option>
+                <option value="reembolsado">{{ __('Reembolsado') }}</option>
+                <option value="cancelado">{{ __('Cancelado') }}</option>
+            </flux:select>
+            
+            <flux:select wire:model.live="estado_despacho" class="sm:w-44">
+                <option value="todos">{{ __('Estado Despacho') }}</option>
+                <option value="pendiente">{{ __('Pendiente') }}</option>
+                <option value="preparado">{{ __('Preparado') }}</option>
+                <option value="despachado">{{ __('Despachado') }}</option>
+                <option value="entregado">{{ __('Entregado') }}</option>
+            </flux:select>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
+                <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
+            </div>
+            <div class="flex-1 sm:text-right">
+                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                    {{ __('Limpiar Filtros') }}
+                </flux:button>
+            </div>
         </div>
     </div>
 

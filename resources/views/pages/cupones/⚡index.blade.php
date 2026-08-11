@@ -11,7 +11,18 @@ use Maatwebsite\Excel\Facades\Excel;
 new #[Title('Cupones de Descuento')] class extends Component {
     use WithPagination;
 
+    #[Url(as: 'q')]
     public string $search = '';
+
+    #[Url]
+    public string $filtroEstado = 'todos';
+
+    #[Url]
+    public string $filtroTipo = 'todos';
+
+    #[Url]
+    public string $filtroVigencia = 'todos';
+
     public string $sortBy = 'id';
     public string $sortDirection = 'desc';
 
@@ -25,8 +36,16 @@ new #[Title('Cupones de Descuento')] class extends Component {
         }
     }
 
-    public function updatedSearch()
+    public function updating($property)
     {
+        if (in_array($property, ['search', 'filtroEstado', 'filtroTipo', 'filtroVigencia'])) {
+            $this->resetPage();
+        }
+    }
+
+    public function resetFiltros()
+    {
+        $this->reset(['search', 'filtroEstado', 'filtroTipo', 'filtroVigencia']);
         $this->resetPage();
     }
 
@@ -51,11 +70,36 @@ new #[Title('Cupones de Descuento')] class extends Component {
 
     private function buildQuery()
     {
-        return Cupon::query()
-            ->when($this->search, function ($query) {
-                $query->where('codigo', 'like', '%' . $this->search . '%');
+        $query = Cupon::query()
+            ->when($this->search, function ($q) {
+                $q->where('codigo', 'like', '%' . $this->search . '%');
             })
             ->orderBy($this->sortBy, $this->sortDirection);
+
+        if ($this->filtroEstado === 'activos') {
+            $query->where('activo', true);
+        } elseif ($this->filtroEstado === 'desactivados') {
+            $query->where('activo', false);
+        }
+
+        if ($this->filtroTipo !== 'todos') {
+            $query->where('tipo_descuento', $this->filtroTipo);
+        }
+
+        $hoy = now()->toDateString();
+        if ($this->filtroVigencia === 'vigentes') {
+            $query->where(function ($q) use ($hoy) {
+                $q->whereNull('fecha_inicio')->orWhere('fecha_inicio', '<=', $hoy);
+            })->where(function ($q) use ($hoy) {
+                $q->whereNull('fecha_expiracion')->orWhere('fecha_expiracion', '>=', $hoy);
+            });
+        } elseif ($this->filtroVigencia === 'expirados') {
+            $query->whereNotNull('fecha_expiracion')->where('fecha_expiracion', '<', $hoy);
+        } elseif ($this->filtroVigencia === 'programados') {
+            $query->whereNotNull('fecha_inicio')->where('fecha_inicio', '>', $hoy);
+        }
+
+        return $query;
     }
 
     public function with(): array
@@ -84,10 +128,40 @@ new #[Title('Cupones de Descuento')] class extends Component {
         </div>
     </div>
 
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-zinc-200 dark:border-zinc-700">
-            <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="Buscar por código..." class="max-w-md" />
+    {{-- Filtros --}}
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4 mb-6">
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por código...') }}" />
+            </div>
+            
+            <flux:select wire:model.live="filtroTipo" class="sm:w-40">
+                <option value="todos">{{ __('Tipo Dcto.') }}</option>
+                <option value="fijo">{{ __('Fijo') }}</option>
+                <option value="porcentaje">{{ __('Porcentaje') }}</option>
+            </flux:select>
+            
+            <flux:select wire:model.live="filtroVigencia" class="sm:w-44">
+                <option value="todos">{{ __('Vigencia') }}</option>
+                <option value="vigentes">{{ __('Vigentes Hoy') }}</option>
+                <option value="expirados">{{ __('Expirados') }}</option>
+                <option value="programados">{{ __('Programados') }}</option>
+            </flux:select>
+
+            <flux:select wire:model.live="filtroEstado" class="sm:w-40">
+                <option value="todos">{{ __('Estado') }}</option>
+                <option value="activos">{{ __('Activos') }}</option>
+                <option value="desactivados">{{ __('Desactivados') }}</option>
+            </flux:select>
+
+            <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
         </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden">
 
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">

@@ -23,6 +23,15 @@ new #[Title('Control de Inventario')] class extends Component {
     public string $atributo_valor_id = '';
 
     #[Url]
+    public string $marca_id = '';
+
+    #[Url]
+    public string $categoria_id = '';
+
+    #[Url]
+    public string $tipo_producto_id = '';
+
+    #[Url]
     public string $stock_min = '';
 
     #[Url]
@@ -33,14 +42,14 @@ new #[Title('Control de Inventario')] class extends Component {
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'almacen_id', 'atributo_valor_id', 'stock_min', 'stock_max', 'perPage'])) {
+        if (in_array($property, ['search', 'almacen_id', 'atributo_valor_id', 'marca_id', 'categoria_id', 'tipo_producto_id', 'stock_min', 'stock_max', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'almacen_id', 'atributo_valor_id', 'stock_min', 'stock_max']);
+        $this->reset(['search', 'almacen_id', 'atributo_valor_id', 'marca_id', 'categoria_id', 'tipo_producto_id', 'stock_min', 'stock_max']);
         $this->perPage = 20;
         $this->resetPage();
     }
@@ -68,6 +77,20 @@ new #[Title('Control de Inventario')] class extends Component {
             });
         }
 
+        if ($this->marca_id || $this->categoria_id || $this->tipo_producto_id) {
+            $query->whereHas('variacion.producto', function ($pq) {
+                if ($this->marca_id) {
+                    $pq->where('marca_id', $this->marca_id);
+                }
+                if ($this->categoria_id) {
+                    $pq->where('categoria_id', $this->categoria_id);
+                }
+                if ($this->tipo_producto_id) {
+                    $pq->where('tipo_producto_id', $this->tipo_producto_id);
+                }
+            });
+        }
+
         if ($this->stock_min !== '') {
             $query->where('stock_base', '>=', $this->stock_min);
         }
@@ -83,6 +106,24 @@ new #[Title('Control de Inventario')] class extends Component {
     public function almacenes()
     {
         return Almacen::where('activo', true)->orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function marcas()
+    {
+        return \App\Models\Marca::where('activo', true)->orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function categorias()
+    {
+        return \App\Models\Categoria::where('activo', true)->orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function tiposProducto()
+    {
+        return \App\Models\TipoProducto::where('activo', true)->orderBy('nombre')->get();
     }
 
     #[Computed]
@@ -105,22 +146,40 @@ new #[Title('Control de Inventario')] class extends Component {
         </div>
     </div>
 
-    {{-- Filtros --}}
+    <!-- Filtros -->
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row gap-3">
-            <div class="flex-1">
-                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por producto o SKU...') }}" />
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por SKU o producto...') }}" />
             </div>
             <flux:select wire:model.live="almacen_id" class="sm:w-44">
-                <option value="">{{ __('Todos los Almacenes') }}</option>
-                @foreach($this->almacenes as $alm)
-                    <option value="{{ $alm->id }}">{{ $alm->nombre }}</option>
+                <option value="">{{ __('Todos los almacenes') }}</option>
+                @foreach($this->almacenes as $a)
+                    <option value="{{ $a->id }}">{{ $a->nombre }}</option>
                 @endforeach
             </flux:select>
-            <flux:select wire:model.live="atributo_valor_id" class="flex-1">
-                <option value="">{{ __('Cualquier Atributo') }}</option>
-                @foreach($this->atributoValores as $val)
-                    <option value="{{ $val['id'] }}">{{ $val['nombre'] }}</option>
+            <flux:select wire:model.live="atributo_valor_id" class="sm:w-44">
+                <option value="">{{ __('Todos los atributos') }}</option>
+                @foreach($this->atributoValores as $av)
+                    <option value="{{ $av['id'] }}">{{ $av['nombre'] }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="tipo_producto_id" class="sm:w-40">
+                <option value="">{{ __('Tipos de Prod.') }}</option>
+                @foreach($this->tiposProducto as $tp)
+                    <option value="{{ $tp->id }}">{{ $tp->nombre }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="categoria_id" class="sm:w-40">
+                <option value="">{{ __('Categorías') }}</option>
+                @foreach($this->categorias as $cat)
+                    <option value="{{ $cat->id }}">{{ $cat->nombre }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="marca_id" class="sm:w-40">
+                <option value="">{{ __('Marcas') }}</option>
+                @foreach($this->marcas as $mar)
+                    <option value="{{ $mar->id }}">{{ $mar->nombre }}</option>
                 @endforeach
             </flux:select>
         </div>

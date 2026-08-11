@@ -25,6 +25,12 @@ new #[Title('Guías de Inventario')] class extends Component {
     public string $filtroEstado = 'todos';
 
     #[Url]
+    public string $almacen_id = '';
+
+    #[Url]
+    public string $tipo_documento_id = '';
+
+    #[Url]
     public string $desde = '';
 
     #[Url]
@@ -35,14 +41,14 @@ new #[Title('Guías de Inventario')] class extends Component {
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroTipo', 'filtroEstado', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroTipo', 'filtroEstado', 'almacen_id', 'tipo_documento_id', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroTipo', 'filtroEstado', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroTipo', 'filtroEstado', 'almacen_id', 'tipo_documento_id', 'desde', 'hasta']);
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -70,6 +76,15 @@ new #[Title('Guías de Inventario')] class extends Component {
             $query->where('estado', $this->filtroEstado);
         }
 
+        $query->when($this->almacen_id, function ($q) {
+            $q->where(function ($sub) {
+                $sub->where('almacen_origen_id', $this->almacen_id)
+                    ->orWhere('almacen_destino_id', $this->almacen_id);
+            });
+        });
+
+        $query->when($this->tipo_documento_id, fn($q) => $q->where('tipo_documento_id', $this->tipo_documento_id));
+
         $query->when($this->desde, fn($q) => $q->whereDate('fecha_movimiento', '>=', $this->desde))
             ->when($this->hasta, fn($q) => $q->whereDate('fecha_movimiento', '<=', $this->hasta));
 
@@ -80,6 +95,18 @@ new #[Title('Guías de Inventario')] class extends Component {
     public function guias()
     {
         return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function almacenes()
+    {
+        return \App\Models\Almacen::where('activo', true)->orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function tiposDocumento()
+    {
+        return \App\Models\TipoDocumento::where('activo', true)->orderBy('nombre')->get();
     }
 
     public ?int $idEliminar = null;
@@ -182,22 +209,37 @@ new #[Title('Guías de Inventario')] class extends Component {
 
     {{-- Filtros --}}
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row gap-3">
-            <div class="flex-1">
-                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por serie, correlativo o proveedor...') }}" />
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por proveedor o comprobante...') }}" />
             </div>
-            <flux:select wire:model.live="filtroTipo" class="sm:w-44">
-                <option value="todos">{{ __('Todos los tipos') }}</option>
-                <option value="Entrada">{{ __('Entradas') }}</option>
-                <option value="Salida">{{ __('Salidas') }}</option>
-                <option value="Transferencia">{{ __('Transferencias') }}</option>
+            
+            <flux:select wire:model.live="filtroTipo" class="sm:w-40">
+                <option value="todos">{{ __('Tipo Mov.') }}</option>
+                <option value="Entrada">{{ __('Entrada') }}</option>
+                <option value="Salida">{{ __('Salida') }}</option>
+                <option value="Transferencia">{{ __('Transferencia') }}</option>
             </flux:select>
-            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
-                <option value="todos">{{ __('Todos los estados') }}</option>
+            
+            <flux:select wire:model.live="filtroEstado" class="sm:w-40">
+                <option value="todos">{{ __('Estado') }}</option>
                 <option value="Borrador">{{ __('Borrador') }}</option>
-                <option value="En Tránsito">{{ __('En Tránsito') }}</option>
                 <option value="Procesado">{{ __('Procesado') }}</option>
                 <option value="Anulado">{{ __('Anulado') }}</option>
+            </flux:select>
+            
+            <flux:select wire:model.live="almacen_id" class="sm:w-44">
+                <option value="">{{ __('Almacén (Origen/Dest)') }}</option>
+                @foreach($this->almacenes as $a)
+                    <option value="{{ $a->id }}">{{ $a->nombre }}</option>
+                @endforeach
+            </flux:select>
+            
+            <flux:select wire:model.live="tipo_documento_id" class="sm:w-44">
+                <option value="">{{ __('Documentos') }}</option>
+                @foreach($this->tiposDocumento as $td)
+                    <option value="{{ $td->id }}">{{ $td->nombre }}</option>
+                @endforeach
             </flux:select>
         </div>
 

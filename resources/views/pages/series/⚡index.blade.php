@@ -20,6 +20,12 @@ new #[Title('Gestión de Series')] class extends Component {
     public string $filtroEstado = 'todos';
 
     #[Url]
+    public string $sede_id = '';
+
+    #[Url]
+    public string $tipo_documento_id = '';
+
+    #[Url]
     public string $filtroPapelera = 'admitidos';
 
     #[Url]
@@ -33,14 +39,14 @@ new #[Title('Gestión de Series')] class extends Component {
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroEstado', 'sede_id', 'tipo_documento_id', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroEstado', 'sede_id', 'tipo_documento_id', 'filtroPapelera', 'desde', 'hasta']);
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -50,6 +56,8 @@ new #[Title('Gestión de Series')] class extends Component {
         $query = Serie::query()
             ->with(['sede', 'tipoDocumento'])
             ->when($this->search, fn($q) => $q->where('serie', 'like', '%' . $this->search . '%'))
+            ->when($this->sede_id, fn($q) => $q->where('sede_id', $this->sede_id))
+            ->when($this->tipo_documento_id, fn($q) => $q->where('tipo_documento_id', $this->tipo_documento_id))
             ->orderBy('id', 'desc');
 
         if ($this->filtroEstado === 'activos') {
@@ -74,6 +82,18 @@ new #[Title('Gestión de Series')] class extends Component {
     public function series()
     {
         return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function sedes()
+    {
+        return \App\Models\Sede::where('activo', true)->orderBy('nombre')->get();
+    }
+
+    #[Computed]
+    public function tiposDocumento()
+    {
+        return \App\Models\TipoDocumento::where('activo', true)->orderBy('nombre')->get();
     }
 
     public ?int $idEliminar = null;
@@ -167,6 +187,18 @@ new #[Title('Gestión de Series')] class extends Component {
             <div class="flex-1">
                 <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por número de serie...') }}" />
             </div>
+            <flux:select wire:model.live="sede_id" class="sm:w-44">
+                <option value="">{{ __('Todas las Sedes') }}</option>
+                @foreach($this->sedes as $s)
+                    <option value="{{ $s->id }}">{{ $s->nombre }}</option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="tipo_documento_id" class="sm:w-44">
+                <option value="">{{ __('Documentos') }}</option>
+                @foreach($this->tiposDocumento as $td)
+                    <option value="{{ $td->id }}">{{ $td->nombre }}</option>
+                @endforeach
+            </flux:select>
             <flux:select wire:model.live="filtroEstado" class="sm:w-44">
                 <option value="todos">{{ __('Todos los estados') }}</option>
                 <option value="activos">{{ __('Activos') }}</option>
@@ -175,7 +207,7 @@ new #[Title('Gestión de Series')] class extends Component {
             <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
                 <option value="admitidos">{{ __('Admitidos') }}</option>
                 <option value="eliminados">{{ __('Eliminados') }}</option>
-                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+                <option value="todos">{{ __('Todos') }}</option>
             </flux:select>
         </div>
 

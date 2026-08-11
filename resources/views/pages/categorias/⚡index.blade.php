@@ -20,6 +20,9 @@ new #[Title('Categorías')] class extends Component {
     public string $filtroEstado = 'todos';
 
     #[Url]
+    public string $categoria_padre_id = '';
+
+    #[Url]
     public string $filtroPapelera = 'admitidos';
 
     #[Url]
@@ -33,14 +36,14 @@ new #[Title('Categorías')] class extends Component {
 
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroEstado', 'categoria_padre_id', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroEstado', 'categoria_padre_id', 'filtroPapelera', 'desde', 'hasta']);
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -60,6 +63,12 @@ new #[Title('Categorías')] class extends Component {
             $query->where('activo', false);
         }
 
+        if ($this->categoria_padre_id === 'root') {
+            $query->whereNull('categoria_padre_id');
+        } elseif ($this->categoria_padre_id) {
+            $query->where('categoria_padre_id', $this->categoria_padre_id);
+        }
+
         if ($this->filtroPapelera === 'eliminados') {
             $query->onlyTrashed();
         } elseif ($this->filtroPapelera === 'todos') {
@@ -76,6 +85,12 @@ new #[Title('Categorías')] class extends Component {
     public function categorias()
     {
         return $this->getBaseQuery()->paginate($this->perPage);
+    }
+
+    #[Computed]
+    public function categoriasPadre()
+    {
+        return Categoria::whereNull('categoria_padre_id')->where('activo', true)->orderBy('nombre')->get();
     }
 
     public ?int $idEliminar = null;
@@ -165,19 +180,29 @@ new #[Title('Categorías')] class extends Component {
 
     {{-- Filtros --}}
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 shadow-sm space-y-4">
-        <div class="flex flex-col sm:flex-row gap-3">
-            <div class="flex-1">
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <div class="flex-1 min-w-[200px]">
                 <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar por nombre o código...') }}" />
             </div>
-            <flux:select wire:model.live="filtroEstado" class="sm:w-44">
+            
+            <flux:select wire:model.live="categoria_padre_id" class="sm:w-44">
+                <option value="">{{ __('Cualquier jerarquía') }}</option>
+                <option value="root">{{ __('Solo Categorías Principales') }}</option>
+                @foreach($this->categoriasPadre as $cp)
+                    <option value="{{ $cp->id }}">{{ __('Subcategorías de') }} {{ $cp->nombre }}</option>
+                @endforeach
+            </flux:select>
+            
+            <flux:select wire:model.live="filtroEstado" class="sm:w-40">
                 <option value="todos">{{ __('Todos los estados') }}</option>
                 <option value="activos">{{ __('Activos') }}</option>
                 <option value="desactivados">{{ __('Desactivados') }}</option>
             </flux:select>
-            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+            
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-40">
                 <option value="admitidos">{{ __('Admitidos') }}</option>
                 <option value="eliminados">{{ __('Eliminados') }}</option>
-                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+                <option value="todos">{{ __('Todos') }}</option>
             </flux:select>
         </div>
 

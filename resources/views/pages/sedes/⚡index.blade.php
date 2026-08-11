@@ -55,7 +55,12 @@ new #[Title('Gestión de Sedes')] class extends Component {
     protected function getBaseQuery()
     {
         $query = Sede::withCount(['almacenes', 'series'])
-            ->when($this->search, fn($q) => $q->where('nombre', 'like', '%' . $this->search . '%'))
+            ->when($this->search, function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('nombre', 'like', '%' . $this->search . '%')
+                        ->orWhere('direccion', 'like', '%' . $this->search . '%');
+                });
+            })
             ->orderBy('nombre', 'asc');
 
         // Filtro de estado de cuenta (Activo / Inactivo)
@@ -187,7 +192,7 @@ new #[Title('Gestión de Sedes')] class extends Component {
         <div class="flex flex-col sm:flex-row gap-3">
             <div class="flex-1">
                 <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass"
-                    placeholder="{{ __('Buscar por nombre de sede...') }}" />
+                    placeholder="{{ __('Buscar por nombre o dirección...') }}" />
             </div>
             <flux:select wire:model.live="filtroEstado" class="sm:w-44">
                 <option value="todos">{{ __('Todos los estados') }}</option>
