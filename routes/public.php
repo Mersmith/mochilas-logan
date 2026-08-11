@@ -7,15 +7,15 @@ use Illuminate\Support\Facades\Route;
 // =============================================
 
 // Catálogo Público
-Route::livewire('catalogo', 'pages::catalogo')->name('catalogo');
+Route::livewire('catalogo', 'pages::ecommerce.catalogo')->name('catalogo');
 
 // Ficha de Producto
-Route::livewire('producto/{producto}/{slug}', 'pages::producto')->name('producto.detalle');
+Route::livewire('producto/{producto}/{slug}', 'pages::ecommerce.producto')->name('producto.detalle');
 
 // Bolsa de Compras
-Route::livewire('carrito', 'pages::carrito')->name('carrito');
+Route::livewire('carrito', 'pages::ecommerce.carrito')->name('carrito');
 
 // Checkout (requiere estar autenticado)
-Route::livewire('checkout', 'pages::checkout')
+Route::livewire('checkout', 'pages::ecommerce.checkout')
     ->name('checkout')
     ->middleware(['auth', 'verified']);

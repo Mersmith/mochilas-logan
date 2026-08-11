@@ -14,7 +14,7 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
     ->group(function () {
 
         // Dashboard (admin y supervisor)
-        Route::livewire('dashboard', 'pages::dashboard')
+        Route::livewire('dashboard', 'pages::ecommerce.dashboard')
             ->name('dashboard')
             ->middleware('can:dashboard.ver');
 
