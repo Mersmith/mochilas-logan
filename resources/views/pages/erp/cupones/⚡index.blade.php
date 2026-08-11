@@ -116,16 +116,11 @@ new #[Title('Cupones de Descuento')] class extends Component {
             <flux:heading size="xl">{{ __('Cupones de Descuento') }}</flux:heading>
             <flux:subheading>{{ __('Gestión de códigos promocionales para los clientes.') }}</flux:subheading>
         </div>
-        <div class="flex gap-2">
-            <flux:button variant="ghost" icon="document-arrow-down" wire:click="exportar">
-                {{ __('Exportar') }}
+        @can('promociones.crear')
+            <flux:button variant="primary" icon="plus" href="{{ route('admin.cupones.create') }}" wire:navigate>
+                {{ __('Nuevo Cupón') }}
             </flux:button>
-            @can('promociones.crear')
-                <flux:button variant="primary" icon="plus" href="{{ route('admin.cupones.create') }}" wire:navigate>
-                    {{ __('Nuevo Cupón') }}
-                </flux:button>
-            @endcan
-        </div>
+        @endcan
     </div>
 
     {{-- Filtros --}}
@@ -154,16 +149,24 @@ new #[Title('Cupones de Descuento')] class extends Component {
                 <option value="desactivados">{{ __('Desactivados') }}</option>
             </flux:select>
 
-            <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path">
-                {{ __('Limpiar') }}
-            </flux:button>
         </div>
     </div>
 
     <!-- Tabla -->
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
 
-        <div class="overflow-x-auto">
+        <!-- Cabecera de tabla: Acciones -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray" wire:click="exportar">
+                {{ __('Exportar') }}
+            </flux:button>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
@@ -226,8 +229,11 @@ new #[Title('Cupones de Descuento')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center py-12 text-zinc-500 dark:text-zinc-400">
-                                {{ __('No se encontraron cupones.') }}
+                            <td colspan="7" class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron resultados para ":query"', ['query' => $search]) : __('No hay cupones registrados.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
@@ -235,10 +241,15 @@ new #[Title('Cupones de Descuento')] class extends Component {
             </table>
         </div>
 
-        @if($cupones->hasPages())
-            <div class="p-4 border-t border-zinc-200 dark:border-zinc-700">
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if($cupones->hasPages())
                 {{ $cupones->links() }}
-            </div>
-        @endif
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => $cupones->total()]) }}
+                </p>
+            @endif
+        </div>
     </div>
 </div>

@@ -9,6 +9,8 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\WithPagination;
 use Flux\Flux;
+use App\Exports\InventariosExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 new #[Title('Control de Inventario')] class extends Component {
     use WithPagination;
@@ -54,10 +56,9 @@ new #[Title('Control de Inventario')] class extends Component {
         $this->resetPage();
     }
 
-    #[Computed]
-    public function inventarios()
+    private function buildQuery()
     {
-        $query = Inventario::with(['variacion.producto.media', 'variacion.valores.atributo', 'almacen'])
+        $query = Inventario::with(['variacion.producto', 'variacion.valores.atributo', 'almacen'])
             ->when($this->search, function ($q) {
                 $q->whereHas('variacion', function ($vq) {
                     $vq->where('sku', 'like', '%' . $this->search . '%')
@@ -99,7 +100,25 @@ new #[Title('Control de Inventario')] class extends Component {
             $query->where('stock_base', '<=', $this->stock_max);
         }
 
-        return $query->paginate($this->perPage);
+        return $query;
+    }
+
+    #[Computed]
+    public function inventarios()
+    {
+        return $this->buildQuery()->paginate($this->perPage);
+    }
+
+    public function exportarTodos()
+    {
+        $query = Inventario::with(['variacion.producto', 'variacion.valores.atributo', 'almacen'])->orderBy('almacen_id');
+        return Excel::download(new InventariosExport($query), 'todos_los_inventarios.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->buildQuery();
+        return Excel::download(new InventariosExport($query), 'inventarios_filtrados.xlsx');
     }
 
     #[Computed]
@@ -190,15 +209,38 @@ new #[Title('Control de Inventario')] class extends Component {
                 <flux:input wire:model.live="stock_max" type="number" label="{{ __('Stock Máx.') }}" class="w-full sm:w-32" />
             </div>
             <div class="mt-4 sm:mt-0">
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
-                    {{ __('Limpiar Filtros') }}
-                </flux:button>
             </div>
         </div>
     </div>
 
     <!-- Tabla -->
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+
+        <!-- Cabecera de tabla: Acciones + PerPage -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los registros') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+
+            <div class="flex items-center gap-2 text-sm text-zinc-500 ml-auto">
+                <span class="hidden sm:inline">{{ __('Mostrar') }}</span>
+                <flux:select wire:model.live="perPage" class="w-20">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+            </div>
+        </div>
+
         <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
@@ -251,18 +293,26 @@ new #[Title('Control de Inventario')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center py-8 text-zinc-500">
-                                {{ __('No hay registros de inventario que coincidan con tu búsqueda.') }}
+                            <td colspan="5" class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron resultados para ":query"', ['query' => $search]) : __('No hay inventario registrado.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if($this->inventarios->hasPages())
-            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800">
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if($this->inventarios->hasPages())
                 {{ $this->inventarios->links() }}
-            </div>
-        @endif
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => $this->inventarios->total()]) }}
+                </p>
+            @endif
+        </div>
     </div>
 </div>

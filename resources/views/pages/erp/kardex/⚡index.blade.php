@@ -6,8 +6,13 @@ use App\Models\Kardex;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
+use Livewire\WithPagination;
+use Flux\Flux;
 
 new #[Title('Kardex Valorizado')] class extends Component {
+    use WithPagination;
+
     public ?int $almacen_id = null;
     public ?int $variacion_id = null;
 
@@ -21,11 +26,24 @@ new #[Title('Kardex Valorizado')] class extends Component {
     public string $desde = '';
 
     #[Url]
+    #[Url]
     public string $hasta = '';
+
+    #[Url]
+    public int $perPage = 20;
+
+    public function updating($property)
+    {
+        if (in_array($property, ['search', 'tipo_transaccion', 'desde', 'hasta', 'perPage', 'almacen_id', 'variacion_id'])) {
+            $this->resetPage();
+        }
+    }
 
     public function resetFiltros()
     {
         $this->reset(['search', 'tipo_transaccion', 'desde', 'hasta']);
+        $this->perPage = 20;
+        $this->resetPage();
     }
 
     /**
@@ -54,6 +72,11 @@ new #[Title('Kardex Valorizado')] class extends Component {
             return collect();
         }
 
+        return $this->buildQuery()->paginate($this->perPage);
+    }
+
+    private function buildQuery()
+    {
         return Kardex::with(['origenDocumento'])
             ->where('almacen_id', $this->almacen_id)
             ->where('variacion_id', $this->variacion_id)
@@ -61,8 +84,17 @@ new #[Title('Kardex Valorizado')] class extends Component {
             ->when($this->tipo_transaccion !== 'todos', fn($q) => $q->where('tipo_transaccion', $this->tipo_transaccion))
             ->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
             ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta))
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('created_at', 'desc');
+    }
+
+    public function exportar()
+    {
+        if (!$this->almacen_id || !$this->variacion_id) {
+            Flux::toast(variant: 'danger', text: __('Selecciona un almacén y una variación para exportar.'));
+            return;
+        }
+
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\KardexExport($this->buildQuery()), 'kardex.xlsx');
     }
 
     /**
@@ -183,7 +215,7 @@ new #[Title('Kardex Valorizado')] class extends Component {
     </div>
 
     <!-- Tabla Histórica (Tailwind para compatibilidad con Flux Free) -->
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden shadow-sm">
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden shadow-sm flex flex-col">
         <div class="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/30 flex flex-col md:flex-row gap-4 items-center justify-between">
             <flux:heading size="lg">{{ __('Historial de Transacciones') }}</flux:heading>
             
@@ -196,11 +228,29 @@ new #[Title('Kardex Valorizado')] class extends Component {
                 </flux:select>
                 <flux:input wire:model.live="desde" type="date" class="w-full sm:w-36" />
                 <flux:input wire:model.live="hasta" type="date" class="w-full sm:w-36" />
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path" />
             </div>
         </div>
 
-        <div class="overflow-x-auto">
+        <!-- Cabecera de tabla: Acciones + PerPage -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray" wire:click="exportar">{{ __('Exportar a Excel') }}</flux:button>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+
+            <div class="flex items-center gap-2 text-sm text-zinc-500 ml-auto">
+                <span class="hidden sm:inline">{{ __('Mostrar') }}</span>
+                <flux:select wire:model.live="perPage" class="w-20">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
@@ -248,13 +298,27 @@ new #[Title('Kardex Valorizado')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center py-8 text-zinc-500">
-                                {{ __('No existen transacciones registradas para este producto y almacén.') }}
+                            <td colspan="8" class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron movimientos para ":query"', ['query' => $search]) : __('No hay movimientos registrados para este almacén y variación.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
+        </div>
+
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if(method_exists($this->movimientos, 'hasPages') && $this->movimientos->hasPages())
+                {{ $this->movimientos->links() }}
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => collect($this->movimientos->items())->count()]) }}
+                </p>
+            @endif
         </div>
     </div>
 </div>

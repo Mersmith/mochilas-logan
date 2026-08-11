@@ -9,10 +9,12 @@ use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
-
 use Livewire\Attributes\Layout;
+use Livewire\WithPagination;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends Component {
+    use WithPagination;
     
     // Filters tracked in URL query string
     #[Url(as: 'categoria')]
@@ -49,6 +51,14 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
         $this->precioMax = null;
         $this->ordenarPor = 'recomendados';
         $this->search = '';
+        $this->resetPage();
+    }
+
+    public function updating($property)
+    {
+        if (in_array($property, ['selectedCategoria', 'selectedMarcas', 'selectedAtributos', 'precioMin', 'precioMax', 'ordenarPor', 'search'])) {
+            $this->resetPage();
+        }
     }
 
     /**
@@ -188,7 +198,16 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
             $products = $products->sortByDesc('created_at');
         }
 
-        return $products;
+        // Paginación Manual de la Colección (20 por página)
+        $perPage = 20;
+        $page = $this->getPage();
+        
+        $results = $products->forPage($page, $perPage);
+        
+        return new LengthAwarePaginator($results, $products->count(), $perPage, $page, [
+            'path' => LengthAwarePaginator::resolveCurrentPath(),
+            'query' => request()->query(),
+        ]);
     }
 }; ?>
 
@@ -385,6 +404,13 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
                     </div>
                 @endforelse
             </div>
+
+            <!-- Paginación -->
+            @if($this->productos->hasPages())
+                <div class="mt-10">
+                    {{ $this->productos->links() }}
+                </div>
+            @endif
         </div>
     </div>
 </div>

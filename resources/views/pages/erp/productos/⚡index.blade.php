@@ -206,23 +206,11 @@ new #[Title('Catálogo de Productos')] class extends Component {
             <flux:heading size="xl">{{ __('Catálogo de Productos') }}</flux:heading>
             <flux:subheading>{{ __('Administra los productos, sus variaciones y precios.') }}</flux:subheading>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <flux:dropdown>
-                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
-                <flux:menu>
-                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos (Excel)') }}</flux:menu.item>
-                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados (Excel)') }}</flux:menu.item>
-                    <flux:menu.separator />
-                    <flux:menu.item wire:click="abrirModalPdf" icon="document-chart-bar">{{ __('Catálogo (PDF)') }}</flux:menu.item>
-                </flux:menu>
-            </flux:dropdown>
-
-            @can('productos.crear')
-                <flux:button variant="primary" icon="plus" href="{{ route('admin.productos.create') }}" wire:navigate>
-                    {{ __('Nuevo Producto') }}
-                </flux:button>
-            @endcan
-        </div>
+        @can('productos.crear')
+            <flux:button variant="primary" icon="plus" href="{{ route('admin.productos.create') }}" wire:navigate>
+                {{ __('Nuevo Producto') }}
+            </flux:button>
+        @endcan
     </div>
 
     {{-- Filtros --}}
@@ -279,16 +267,38 @@ new #[Title('Catálogo de Productos')] class extends Component {
                 <flux:input wire:model.live="desde" type="date" class="w-full md:w-40" />
                 <flux:input wire:model.live="hasta" type="date" class="w-full md:w-40" />
             </div>
-            <div class="mt-4 sm:mt-0 w-full sm:w-auto text-right">
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none w-full sm:w-auto" wire:click="resetFiltros" icon="arrow-path">
-                    {{ __('Limpiar Filtros') }}
-                </flux:button>
-            </div>
-        </div>
     </div>
 
     <!-- Tabla -->
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        
+        <!-- Cabecera de tabla: Acciones + PerPage -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los registros') }}</flux:menu.item>
+                    <flux:menu.separator />
+                    <flux:menu.item wire:click="abrirModalPdf" icon="document-chart-bar">{{ __('Catálogo (PDF)') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+
+            <div class="flex items-center gap-2 text-sm text-zinc-500 ml-auto">
+                <span class="hidden sm:inline">{{ __('Mostrar') }}</span>
+                <flux:select wire:model.live="perPage" class="w-20">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+            </div>
+        </div>
+
         <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
@@ -364,35 +374,28 @@ new #[Title('Catálogo de Productos')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->can('productos.editar') ? 7 : 6 }}"
-                                class="text-center py-8 text-zinc-500">
-                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                            <td colspan="{{ auth()->user()->can('productos.editar') ? 7 : 6 }}" class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron resultados para ":query"', ['query' => $search]) : __('No hay registros encontrados.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if($this->productos->hasPages())
-            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                <div class="w-full sm:w-auto">
-                    {{ $this->productos->links() }}
-                </div>
-                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
-                    <span>{{ __('Mostrar') }}</span>
-                    <flux:select wire:model.live="perPage" class="w-20">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </flux:select>
-                </div>
-            </div>
-        @else
-            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
-                <span>{{ $this->productos->total() }} {{ __('registro(s) encontrado(s)') }}</span>
-            </div>
-        @endif
+
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if($this->productos->hasPages())
+                {{ $this->productos->links() }}
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => $this->productos->total()]) }}
+                </p>
+            @endif
+        </div>
     </div>
 
     <x-modal-eliminar name="modal-eliminar-soft" />

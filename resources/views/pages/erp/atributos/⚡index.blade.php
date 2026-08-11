@@ -143,21 +143,12 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
             <flux:heading size="xl">{{ __('Atributos') }}</flux:heading>
             <flux:subheading>{{ __('Administra los atributos para las variaciones de productos (colores, tallas).') }}</flux:subheading>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <flux:dropdown>
-                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
-                <flux:menu>
-                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos') }}</flux:menu.item>
-                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Filtrados') }}</flux:menu.item>
-                </flux:menu>
-            </flux:dropdown>
-
-            @can('atributos.editar')
+        @can('atributos.editar')
                 <flux:button variant="primary" icon="plus" href="{{ route('admin.atributos.create') }}" wire:navigate>
                     {{ __('Nuevo Atributo') }}
                 </flux:button>
             @endcan
-        </div>
+        
     </div>
 
     {{-- Filtros --}}
@@ -178,21 +169,39 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
             </flux:select>
         </div>
 
-        <div class="flex flex-col sm:flex-row items-end gap-3">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
                 <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
                 <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
             </div>
-            <div class="flex-1 sm:text-right">
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
-                    {{ __('Limpiar Filtros') }}
-                </flux:button>
-            </div>
-        </div>
     </div>
 
     <!-- Tabla -->
     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                <!-- Cabecera de tabla: Acciones + PerPage -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los registros') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+
+            <div class="flex items-center gap-2 text-sm text-zinc-500 ml-auto">
+                <span class="hidden sm:inline">{{ __('Mostrar') }}</span>
+                <flux:select wire:model.live="perPage" class="w-20">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+            </div>
+        </div>
+
         <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
@@ -243,34 +252,28 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                     @empty
                         <tr>
                             <td colspan="{{ auth()->user()->can('atributos.editar') ? 3 : 2 }}"
-                                class="text-center py-8 text-zinc-500">
-                                {{ __('No hay registros que coincidan con tu búsqueda.') }}
+                                class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron resultados para ":query"', ['query' => $search]) : __('No hay registros.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-        @if($this->atributos->hasPages())
-            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                <div class="w-full sm:w-auto">
-                    {{ $this->atributos->links() }}
-                </div>
-                <div class="hidden sm:flex items-center gap-2 text-sm text-zinc-500">
-                    <span>{{ __('Mostrar') }}</span>
-                    <flux:select wire:model.live="perPage" class="w-20">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                    </flux:select>
-                </div>
-            </div>
-        @else
-            <div class="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
-                <span>{{ $this->atributos->total() }} {{ __('registro(s) encontrado(s)') }}</span>
-            </div>
-        @endif
+
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if($this->atributos->hasPages())
+                {{ $this->atributos->links() }}
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => $this->atributos->total()]) }}
+                </p>
+            @endif
+        </div>
     </div>
 
     <x-modal-eliminar name="modal-eliminar-soft" />

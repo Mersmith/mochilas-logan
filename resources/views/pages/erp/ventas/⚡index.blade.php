@@ -12,7 +12,10 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
 use Flux\Flux;
+use App\Exports\VentasExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 new #[Title('Historial de Ventas')] class extends Component {
     use WithPagination;
@@ -32,6 +35,9 @@ new #[Title('Historial de Ventas')] class extends Component {
     #[Url]
     public string $hasta = '';
 
+    #[Url]
+    public int $perPage = 20;
+
     public ?int $selectedVentaId = null;
     public bool $showDetailModal = false;
 
@@ -40,7 +46,7 @@ new #[Title('Historial de Ventas')] class extends Component {
      */
     public function updating($property)
     {
-        if (in_array($property, ['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta'])) {
+        if (in_array($property, ['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
@@ -48,14 +54,14 @@ new #[Title('Historial de Ventas')] class extends Component {
     public function resetFiltros()
     {
         $this->reset(['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta']);
+        $this->perPage = 20;
         $this->resetPage();
     }
 
     /**
      * Get filtered sales.
      */
-    #[Computed]
-    public function ventas()
+    private function buildQuery()
     {
         return Venta::with(['user', 'tipoDocumento', 'movimientosKardex.almacen'])
             ->when($this->search, function ($query) {
@@ -70,8 +76,25 @@ new #[Title('Historial de Ventas')] class extends Component {
             ->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
             ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta))
             ->orderBy('created_at', 'desc')
-            ->orderBy('correlativo', 'desc')
-            ->paginate(10);
+            ->orderBy('correlativo', 'desc');
+    }
+
+    #[Computed]
+    public function ventas()
+    {
+        return $this->buildQuery()->paginate($this->perPage);
+    }
+
+    public function exportarTodos()
+    {
+        $query = Venta::with(['user', 'tipoDocumento', 'movimientosKardex.almacen'])->orderBy('created_at', 'desc');
+        return Excel::download(new VentasExport($query), 'todas_las_ventas.xlsx');
+    }
+
+    public function exportarFiltrados()
+    {
+        $query = $this->buildQuery();
+        return Excel::download(new VentasExport($query), 'ventas_filtradas.xlsx');
     }
 
     /**
@@ -211,17 +234,38 @@ new #[Title('Historial de Ventas')] class extends Component {
                 <flux:input wire:model.live="desde" type="date" label="{{ __('Desde') }}" class="w-full sm:w-40" />
                 <flux:input wire:model.live="hasta" type="date" label="{{ __('Hasta') }}" class="w-full sm:w-40" />
             </div>
-            <div class="flex-1 sm:text-right">
-                <flux:button class="!bg-blue-600 !text-white hover:!bg-blue-700 border-none" wire:click="resetFiltros" icon="arrow-path">
-                    {{ __('Limpiar Filtros') }}
-                </flux:button>
-            </div>
         </div>
     </div>
 
-    <!-- Tabla (Tailwind para compatibilidad con Flux Free) -->
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden shadow-sm">
-        <div class="overflow-x-auto">
+    <!-- Tabla -->
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-sm overflow-hidden flex flex-col">
+
+        <!-- Cabecera de tabla: Acciones + PerPage -->
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30">
+            <flux:dropdown>
+                <flux:button class="!bg-emerald-600 !text-white hover:!bg-emerald-700 border-none" size="sm" icon="arrow-down-tray">{{ __('Exportar') }}</flux:button>
+                <flux:menu>
+                    <flux:menu.item wire:click="exportarFiltrados" icon="funnel">{{ __('Resultados filtrados') }}</flux:menu.item>
+                    <flux:menu.item wire:click="exportarTodos" icon="document-text">{{ __('Todos los registros') }}</flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
+
+            <flux:button size="sm" class="!bg-red-600 !text-white hover:!bg-red-700 border-none" wire:click="resetFiltros" icon="arrow-path">
+                {{ __('Limpiar') }}
+            </flux:button>
+
+            <div class="flex items-center gap-2 text-sm text-zinc-500 ml-auto">
+                <span class="hidden sm:inline">{{ __('Mostrar') }}</span>
+                <flux:select wire:model.live="perPage" class="w-20">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
@@ -272,8 +316,11 @@ new #[Title('Historial de Ventas')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center py-8 text-zinc-500">
-                                {{ __('No se encontraron comprobantes de venta.') }}
+                            <td colspan="8" class="text-center py-12 text-zinc-400">
+                                <div class="flex flex-col items-center gap-2">
+                                    <flux:icon.face-smile class="size-8 text-zinc-300" />
+                                    <span>{{ $search ? __('No se encontraron resultados para ":query"', ['query' => $search]) : __('No hay comprobantes de venta registrados.') }}</span>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
@@ -281,11 +328,16 @@ new #[Title('Historial de Ventas')] class extends Component {
             </table>
         </div>
 
-        @if($this->ventas->hasPages())
-            <div class="p-4 border-t border-zinc-200 dark:border-zinc-700">
+        <!-- Pie de tabla: Paginación + Info -->
+        <div class="px-4 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            @if($this->ventas->hasPages())
                 {{ $this->ventas->links() }}
-            </div>
-        @endif
+            @else
+                <p class="text-xs text-zinc-400">
+                    {{ __(':total registro(s)', ['total' => $this->ventas->total()]) }}
+                </p>
+            @endif
+        </div>
     </div>
 
     <!-- Modal Detalle Venta (Recibo/Ticket style) -->
