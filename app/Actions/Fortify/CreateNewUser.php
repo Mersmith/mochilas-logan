@@ -24,10 +24,26 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
-        return User::create([
+        $user = User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
+            // La columna role tomará el valor por defecto 'client' en la tabla users
         ]);
+
+        // 1. Asignar rol con Spatie Permissions
+        $user->assignRole('cliente');
+
+        // 2. Obtener o crear una lista de precios por defecto para evitar error de Foreign Key
+        $listaPrecio = \App\Models\ListaPrecio::firstOrCreate(['nombre' => 'Precio Menor']);
+
+        // 3. Crear su perfil en la tabla clientes
+        $user->cliente()->create([
+            'tipo_persona' => 'natural',
+            'tipo_cliente' => 'minorista',
+            'lista_precio_id' => $listaPrecio->id,
+        ]);
+
+        return $user;
     }
 }

@@ -167,7 +167,7 @@ class RolesAndPermissionsSeeder extends Seeder
         // 3. ASIGNAR ROL ADMIN AL USUARIO EXISTENTE (ID 1)
         // =============================================
         $adminUser = User::find(1);
-        if ($adminUser && ! $adminUser->hasRole('admin')) {
+        if ($adminUser && !$adminUser->hasRole('admin')) {
             $adminUser->assignRole('admin');
         }
 
@@ -179,7 +179,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ['name' => 'Usuario Vendedor', 'email' => 'vendedor@logan.com', 'role' => 'vendedor'],
             ['name' => 'Usuario Almacen', 'email' => 'almacen@logan.com', 'role' => 'almacen'],
             ['name' => 'Usuario Logistica', 'email' => 'logistica@logan.com', 'role' => 'logistica'],
-            ['name' => 'Usuario Cliente', 'email' => 'cliente@logan.com', 'role' => 'cliente'],
+            //['name' => 'Usuario Cliente', 'email' => 'cliente@logan.com', 'role' => 'cliente'],
         ];
 
         foreach ($testUsers as $userData) {
@@ -189,10 +189,11 @@ class RolesAndPermissionsSeeder extends Seeder
                     'name' => $userData['name'],
                     'password' => bcrypt('password'),
                     'email_verified_at' => now(),
+                    'role' => 'admin',
                 ]
             );
 
-            if (! $user->hasRole($userData['role'])) {
+            if (!$user->hasRole($userData['role'])) {
                 $user->assignRole($userData['role']);
             }
         }
@@ -200,7 +201,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $this->command->info('✅ Roles, permisos y usuarios de prueba creados correctamente.');
         $this->command->table(
             ['Rol', 'Permisos'],
-            Role::with('permissions')->get()->map(fn ($r) => [
+            Role::with('permissions')->get()->map(fn($r) => [
                 $r->name,
                 $r->permissions->pluck('name')->implode(', ') ?: '(sin permisos de panel)',
             ])->toArray()
