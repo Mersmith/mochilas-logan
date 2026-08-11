@@ -24,6 +24,8 @@ class Producto extends Model implements HasMedia
         'slug',
         'descripcion',
         'activo',
+        'especificaciones',
+        'politica_garantia',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -52,6 +54,7 @@ class Producto extends Model implements HasMedia
 
     protected $casts = [
         'activo' => 'boolean',
+        'especificaciones' => 'array',
     ];
 
     /**

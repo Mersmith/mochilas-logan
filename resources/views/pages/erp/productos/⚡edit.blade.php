@@ -30,6 +30,8 @@ new #[Title('Editar Producto')] class extends Component {
     public string $slug = '';
     public string $descripcion = '';
     public bool $activo = true;
+    public array $especificaciones = [['clave' => '', 'valor' => '']];
+    public string $politica_garantia = '';
 
     // Image Properties
     public $nueva_imagen_principal;
@@ -58,6 +60,16 @@ new #[Title('Editar Producto')] class extends Component {
         $this->slug = $producto->slug;
         $this->descripcion = $producto->descripcion ?? '';
         $this->activo = $producto->activo;
+        
+        $specs = $producto->especificaciones ?? [];
+        $this->especificaciones = [];
+        foreach($specs as $key => $val) {
+            $this->especificaciones[] = ['clave' => $key, 'valor' => $val];
+        }
+        if (empty($this->especificaciones)) {
+            $this->especificaciones[] = ['clave' => '', 'valor' => ''];
+        }
+        $this->politica_garantia = $producto->politica_garantia ?? '';
 
         // Cargar variaciones
         $this->cargarVariacionesExistentes();
@@ -71,6 +83,17 @@ new #[Title('Editar Producto')] class extends Component {
     // ==========================================
     // LÓGICA DE INFORMACIÓN GENERAL E IMÁGENES
     // ==========================================
+
+    public function agregarEspecificacion()
+    {
+        $this->especificaciones[] = ['clave' => '', 'valor' => ''];
+    }
+
+    public function removerEspecificacion($index)
+    {
+        unset($this->especificaciones[$index]);
+        $this->especificaciones = array_values($this->especificaciones);
+    }
 
     public function guardarGeneral()
     {
@@ -86,6 +109,8 @@ new #[Title('Editar Producto')] class extends Component {
             'slug' => 'required|string|max:255|unique:productos,slug,' . $this->producto->id,
             'descripcion' => 'nullable|string',
             'activo' => 'boolean',
+            'especificaciones' => 'array',
+            'politica_garantia' => 'nullable|string',
         ]);
 
         $this->producto->update([
@@ -96,6 +121,8 @@ new #[Title('Editar Producto')] class extends Component {
             'slug' => $this->slug,
             'descripcion' => $this->descripcion,
             'activo' => $this->activo,
+            'especificaciones' => collect($this->especificaciones)->filter(fn($e) => $e['clave'] !== '')->pluck('valor', 'clave')->toArray(),
+            'politica_garantia' => $this->politica_garantia,
         ]);
 
         Flux::toast(variant: 'success', text: 'Información general actualizada.');
@@ -467,6 +494,36 @@ new #[Title('Editar Producto')] class extends Component {
                         <flux:label>{{ __('Descripción Detallada') }}</flux:label>
                         <flux:textarea wire:model="descripcion" rows="4" placeholder="Describe las características principales del producto..." />
                         <flux:error name="descripcion" />
+                    </flux:field>
+                </div>
+
+                <div class="md:col-span-2">
+                    <hr class="border-zinc-200 dark:border-zinc-700 my-4" />
+                    <div class="flex items-center justify-between mb-2">
+                        <flux:label class="text-lg">{{ __('Especificaciones Adicionales') }}</flux:label>
+                        <flux:button size="sm" wire:click.prevent="agregarEspecificacion" icon="plus">{{ __('Añadir') }}</flux:button>
+                    </div>
+                    <div class="space-y-3">
+                        @foreach($especificaciones as $index => $especificacion)
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1">
+                                    <flux:input wire:model="especificaciones.{{ $index }}.clave" placeholder="Ej. Material" />
+                                </div>
+                                <div class="flex-1">
+                                    <flux:input wire:model="especificaciones.{{ $index }}.valor" placeholder="Ej. Poliéster" />
+                                </div>
+                                <flux:button variant="danger" size="sm" wire:click.prevent="removerEspecificacion({{ $index }})" icon="trash" />
+                            </div>
+                        @endforeach
+                        <flux:error name="especificaciones" />
+                    </div>
+                </div>
+
+                <div class="md:col-span-2">
+                    <flux:field>
+                        <flux:label>{{ __('Política de Garantía (Opcional)') }}</flux:label>
+                        <flux:textarea wire:model="politica_garantia" rows="3" placeholder="Si se deja vacío, se mostrará la política estándar de 30 días." />
+                        <flux:error name="politica_garantia" />
                     </flux:field>
                 </div>
 

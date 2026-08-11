@@ -17,6 +17,7 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
     // Track selected variation options
     public array $selectedAttributes = [];
     public int $quantity = 1;
+    public ?string $currentImage = null;
 
     #[Computed]
     public function isFavorite()
@@ -63,11 +64,22 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         $this->slug = $slug;
 
         // Auto-select first options of attributes
-        $available = $this->atributosDisponibles;
-        foreach ($available as $name => $vals) {
-            if (!empty($vals)) {
-                $this->selectedAttributes[$name] = reset($vals);
+        if ($this->producto->variacions->isNotEmpty()) {
+            $defaultVariation = $this->producto->variacions->first();
+            foreach ($defaultVariation->valores as $valor) {
+                $this->selectedAttributes[$valor->atributo->nombre] = $valor->valor;
             }
+        } else {
+            $available = $this->atributosDisponibles;
+            foreach ($available as $name => $vals) {
+                if (!empty($vals)) {
+                    $this->selectedAttributes[$name] = reset($vals);
+                }
+            }
+        }
+        
+        if ($this->producto->getFirstMediaUrl('productos')) {
+            $this->currentImage = $this->producto->getFirstMediaUrl('productos');
         }
     }
 
@@ -113,10 +125,25 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
     /**
      * Select an attribute option.
      */
-    public function selectOption(string $name, string $value): void
+    public function selectOption($attribute, $value)
     {
-        $this->selectedAttributes[$name] = $value;
-        $this->quantity = 1; // Reset quantity on variation change
+        $this->selectedAttributes[$attribute] = $value;
+        $this->quantity = 1;
+        $this->resetValidation();
+        
+        // Aquí podríamos filtrar imágenes si tuvieran properties de color.
+        // Simularemos que al cambiar de color actualizamos la imagen.
+        if (strtolower($attribute) === 'color') {
+            $mediaItems = $this->producto->getMedia('productos');
+            // Buscamos si alguna imagen tiene en custom_properties ['color' => $value]
+            $matchedMedia = $mediaItems->first(function($media) use ($value) {
+                return strtolower($media->getCustomProperty('color', '')) === strtolower($value);
+            });
+            
+            if ($matchedMedia) {
+                $this->currentImage = $matchedMedia->getUrl();
+            }
+        }
     }
 
     /**
@@ -200,10 +227,15 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-        <!-- Columna Izquierda: Galería de imágenes (Placeholder) -->
+        <!-- Columna Izquierda: Galería de imágenes -->
         <div class="space-y-6">
             <div class="aspect-square w-full bg-zinc-100 dark:bg-zinc-950 rounded-2xl flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 relative overflow-hidden group">
-                <flux:icon name="archive-box" class="size-36 text-zinc-300 dark:text-zinc-700" />
+                
+                @if($currentImage)
+                    <img src="{{ $currentImage }}" alt="{{ $producto->nombre }}" class="w-full h-full object-cover" />
+                @else
+                    <flux:icon name="archive-box" class="size-36 text-zinc-300 dark:text-zinc-700" />
+                @endif
                 
                 @if($this->producto->descuentos->isNotEmpty())
                     <div class="absolute top-6 left-6 bg-rose-600 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-full shadow-md">
@@ -213,11 +245,15 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
             </div>
 
             <!-- Miniaturas -->
-            <div class="grid grid-cols-4 gap-4">
-                <div class="aspect-square bg-zinc-100 dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-800 rounded-xl flex items-center justify-center cursor-pointer">
-                    <flux:icon name="archive-box" class="size-8 text-zinc-400" />
+            @if($this->producto->getMedia('productos')->count() > 0)
+                <div class="grid grid-cols-4 gap-4">
+                    @foreach($this->producto->getMedia('productos') as $media)
+                        <button wire:click="$set('currentImage', '{{ $media->getUrl() }}')" class="aspect-square bg-zinc-100 dark:bg-zinc-950 border {{ $currentImage === $media->getUrl() ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-900 dark:ring-white' : 'border-zinc-300 dark:border-zinc-800' }} rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-all">
+                            <img src="{{ $media->getUrl() }}" alt="Miniatura" class="w-full h-full object-cover" />
+                        </button>
+                    @endforeach
                 </div>
-            </div>
+            @endif
         </div>
 
         <!-- Columna Derecha: Panel de compra y variaciones -->
@@ -322,13 +358,14 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
 
             <div class="flex items-center justify-between">
                 <div>
-                    <flux:text size="sm" class="text-zinc-500 font-semibold">{{ __('Precio Internet') }}</flux:text>
+                    @if($activeDiscount)
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-sm font-semibold text-zinc-400 line-through">S/ {{ number_format($basePrice, 2) }}</span>
+                            <flux:badge color="red" size="sm">-{{ $pct }}%</flux:badge>
+                        </div>
+                    @endif
                     <div class="flex items-baseline gap-3 mt-1">
                         <span class="text-3xl font-extrabold text-zinc-900 dark:text-white">S/ {{ number_format($finalPrice, 2) }}</span>
-                        
-                        @if($activeDiscount)
-                            <span class="text-sm text-zinc-400 line-through">S/ {{ number_format($basePrice, 2) }}</span>
-                        @endif
                     </div>
                 </div>
 
@@ -379,5 +416,94 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                 </div>
             @endif
         </div>
+    </div>
+    
+    <!-- Acordeones de Información -->
+    <div class="mt-12 space-y-4">
+        
+        <!-- Información Adicional -->
+        <div x-data="{ open: true }" class="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">
+            <button @click="open = !open" class="w-full flex items-center justify-between p-6 text-left focus:outline-none">
+                <h3 class="text-base font-bold text-zinc-900 dark:text-white">Información adicional</h3>
+                <flux:icon name="chevron-down" class="size-5 text-zinc-500 transition-transform duration-200" x-bind:class="open ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="open" x-collapse class="px-6 pb-6 text-sm text-zinc-600 dark:text-zinc-400">
+                {!! nl2br(e($producto->descripcion ?? 'Mochila de alta calidad con múltiples compartimentos.')) !!}
+            </div>
+        </div>
+
+        <!-- Especificaciones -->
+        <div x-data="{ open: false }" class="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">
+            <button @click="open = !open" class="w-full flex items-center justify-between p-6 text-left focus:outline-none">
+                <h3 class="text-base font-bold text-zinc-900 dark:text-white">Especificaciones</h3>
+                <flux:icon name="chevron-down" class="size-5 text-zinc-500 transition-transform duration-200" x-bind:class="open ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="open" x-collapse class="px-6 pb-6">
+                <div class="border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden">
+                    <table class="w-full text-sm text-left">
+                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            <!-- Datos base -->
+                            <tr class="bg-zinc-50 dark:bg-zinc-900/50">
+                                <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">Condición del producto</td>
+                                <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">Nuevo</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">Marca</td>
+                                <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ $producto->marca->nombre ?? 'N/A' }}</td>
+                            </tr>
+                            <tr class="bg-zinc-50 dark:bg-zinc-900/50">
+                                <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">Categoría</td>
+                                <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ $producto->categoria->nombre ?? 'N/A' }}</td>
+                            </tr>
+                            
+                            <!-- Atributos dinámicos del producto -->
+                            @php $index = 0; @endphp
+                            @foreach($this->atributosDisponibles as $nombreAtributo => $valores)
+                                <tr class="{{ $index % 2 == 0 ? '' : 'bg-zinc-50 dark:bg-zinc-900/50' }}">
+                                    <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">{{ $nombreAtributo }}</td>
+                                    <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ implode(', ', $valores) }}</td>
+                                </tr>
+                                @php $index++; @endphp
+                            @endforeach
+
+                            <!-- Especificaciones Adicionales (Desde DB) -->
+                            @if($producto->especificaciones)
+                                @foreach($producto->especificaciones as $clave => $valor)
+                                    <tr class="{{ $index % 2 == 0 ? '' : 'bg-zinc-50 dark:bg-zinc-900/50' }}">
+                                        <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">{{ $clave }}</td>
+                                        <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ $valor }}</td>
+                                    </tr>
+                                    @php $index++; @endphp
+                                @endforeach
+                            @endif
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Satisfacción Garantizada -->
+        <div x-data="{ open: false }" class="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900">
+            <button @click="open = !open" class="w-full flex items-center justify-between p-6 text-left focus:outline-none">
+                <h3 class="text-base font-bold text-zinc-900 dark:text-white">Satisfacción garantizada</h3>
+                <flux:icon name="chevron-down" class="size-5 text-zinc-500 transition-transform duration-200" x-bind:class="open ? 'rotate-180' : ''" />
+            </button>
+            <div x-show="open" x-collapse class="px-6 pb-6 text-sm text-zinc-700 dark:text-zinc-300 space-y-4">
+                @if($producto->politica_garantia)
+                    <div class="prose dark:prose-invert max-w-none text-sm text-zinc-600 dark:text-zinc-400">
+                        {!! nl2br(e($producto->politica_garantia)) !!}
+                    </div>
+                @else
+                    <p><strong>La mayoría de los productos tienen 30 días desde que los recibes para hacer una devolución.</strong></p>
+                    <p>Sin embargo, tenemos categorías que cuentan con plazos diferentes, otras con restricciones y algunas que no se pueden devolver ni cambiar. Conoce cuáles son:</p>
+                    <ul class="list-disc pl-5 space-y-2 text-zinc-600 dark:text-zinc-400">
+                        <li>Productos como ropa interior o trajes de baño no tienen cambio por motivos de higiene.</li>
+                        <li>Los productos deben devolverse en su empaque original, con todas sus etiquetas y sin señales de uso.</li>
+                        <li>Si el producto tiene alguna falla de fábrica, la garantía aplicará según los términos del fabricante.</li>
+                    </ul>
+                @endif
+            </div>
+        </div>
+
     </div>
 </div>
