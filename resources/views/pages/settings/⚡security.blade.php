@@ -3,6 +3,7 @@
 use App\Concerns\PasswordValidationRules;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Actions\DisableTwoFactorAuthentication;
 use Laravel\Fortify\Features;
@@ -13,6 +14,7 @@ use Livewire\Component;
 use Laravel\Passkeys\Actions\DeletePasskey;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Computed;
 
 new #[Title('Security settings')] #[Layout('layouts.settings')] class extends Component {
     use PasswordValidationRules;
@@ -145,6 +147,13 @@ new #[Title('Security settings')] #[Layout('layouts.settings')] class extends Co
         $this->showDeleteModal = false;
         $this->deletingPasskeyId = null;
         $this->deletingPasskeyName = '';
+    }
+
+    #[Computed]
+    public function showDeleteUser(): bool
+    {
+        return ! Auth::user() instanceof MustVerifyEmail
+            || (Auth::user() instanceof MustVerifyEmail && Auth::user()->hasVerifiedEmail());
     }
 
     /**
@@ -306,6 +315,12 @@ new #[Title('Security settings')] #[Layout('layouts.settings')] class extends Co
                     <x-passkey-registration />
                 </div>
             </section>
+        @endif
+
+        @if ($this->showDeleteUser)
+            <div class="my-10 border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                <livewire:pages::settings.delete-user-form />
+            </div>
         @endif
     </x-pages::settings.layout>
 

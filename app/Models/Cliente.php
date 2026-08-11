@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property int $id
@@ -174,5 +175,20 @@ class Cliente extends Model
     public function esPersonaNatural(): bool
     {
         return $this->tipo_persona === 'natural';
+    }
+
+    public function mediosPagos(): HasMany
+    {
+        return $this->hasMany(MedioPago::class);
+    }
+
+    public function datoReembolso()
+    {
+        return $this->hasOne(DatoReembolso::class);
+    }
+
+    public function favoritos(): BelongsToMany
+    {
+        return $this->belongsToMany(Producto::class, 'favoritos')->withTimestamps();
     }
 }

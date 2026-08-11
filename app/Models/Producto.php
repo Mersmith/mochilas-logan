@@ -137,6 +137,11 @@ class Producto extends Model implements HasMedia
         return $this->hasMany(ProductoEmpaque::class);
     }
 
+    public function favoritosPor(): BelongsToMany
+    {
+        return $this->belongsToMany(Cliente::class, 'favoritos')->withTimestamps();
+    }
+
     /**
      * Get the discounts associated with the product.
      *

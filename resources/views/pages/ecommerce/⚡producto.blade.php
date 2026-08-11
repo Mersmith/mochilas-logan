@@ -7,6 +7,7 @@ use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Computed;
+use Illuminate\Support\Facades\Auth;
 use Flux\Flux;
 
 new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Component {
@@ -16,6 +17,32 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
     // Track selected variation options
     public array $selectedAttributes = [];
     public int $quantity = 1;
+
+    #[Computed]
+    public function isFavorite()
+    {
+        if (Auth::check() && Auth::user()->cliente) {
+            return Auth::user()->cliente->favoritos()->where('producto_id', $this->producto->id)->exists();
+        }
+        return false;
+    }
+
+    public function toggleFavorito()
+    {
+        if (!Auth::check() || !Auth::user()->cliente) {
+            return $this->redirect(route('login'), navigate: true);
+        }
+
+        $cliente = Auth::user()->cliente;
+
+        if ($this->isFavorite) {
+            $cliente->favoritos()->detach($this->producto->id);
+            Flux::toast(variant: 'success', text: __('Producto eliminado de tus favoritos.'));
+        } else {
+            $cliente->favoritos()->attach($this->producto->id);
+            Flux::toast(variant: 'success', text: __('Producto guardado en tus favoritos.'));
+        }
+    }
 
     /**
      * Mount the component.
@@ -330,6 +357,19 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                     <flux:button variant="primary" wire:click.prevent="addToCart" class="flex-1 font-bold h-11 rounded-xl" icon="shopping-bag">
                         {{ __('Agregar al Carro') }}
                     </flux:button>
+                    
+                    <!-- Botón Favoritos -->
+                    <button wire:click.prevent="toggleFavorito" class="h-11 px-3 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center text-zinc-500 hover:text-rose-500 {{ $this->isFavorite ? 'text-rose-500' : '' }}">
+                        @if($this->isFavorite)
+                            <svg xmlns="http://www.w3.org/2000/svg" class="size-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+                            </svg>
+                        @else
+                            <svg xmlns="http://www.w3.org/2000/svg" class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                        @endif
+                    </button>
                 </div>
             @else
                 <div class="pt-2">

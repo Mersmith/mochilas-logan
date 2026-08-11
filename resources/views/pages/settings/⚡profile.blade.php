@@ -15,6 +15,12 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
 
     public string $name = '';
     public string $email = '';
+    
+    // Campos del cliente
+    public string $dni = '';
+    public string $ruc = '';
+    public string $razon_social = '';
+    public string $telefono = '';
 
     /**
      * Mount the component.
@@ -23,6 +29,14 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
     {
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
+        
+        if (Auth::user()->hasRole('cliente') && Auth::user()->cliente) {
+            $cliente = Auth::user()->cliente;
+            $this->dni = $cliente->dni ?? '';
+            $this->ruc = $cliente->ruc ?? '';
+            $this->razon_social = $cliente->razon_social ?? '';
+            $this->telefono = $cliente->telefono ?? '';
+        }
     }
 
     /**
@@ -33,6 +47,21 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
         $user = Auth::user();
 
         $validated = $this->validate($this->profileRules($user->id));
+        
+        if ($user->hasRole('cliente')) {
+            $clienteValidated = $this->validate([
+                'dni' => ['nullable', 'string', 'max:8'],
+                'ruc' => ['nullable', 'string', 'max:11'],
+                'razon_social' => ['nullable', 'string', 'max:255'],
+                'telefono' => ['nullable', 'string', 'max:15'],
+            ]);
+            
+            if ($user->cliente) {
+                $user->cliente->update($clienteValidated);
+            } else {
+                $user->cliente()->create($clienteValidated);
+            }
+        }
 
         $user->fill($validated);
 
@@ -68,13 +97,6 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
     {
         return Auth::user() instanceof MustVerifyEmail && ! Auth::user()->hasVerifiedEmail();
     }
-
-    #[Computed]
-    public function showDeleteUser(): bool
-    {
-        return ! Auth::user() instanceof MustVerifyEmail
-            || (Auth::user() instanceof MustVerifyEmail && Auth::user()->hasVerifiedEmail());
-    }
 }; ?>
 
 <section class="w-full">
@@ -108,6 +130,19 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
                 @endif
             </div>
 
+            @if(auth()->user()->hasRole('cliente'))
+                <div class="pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                    <flux:heading size="md" class="mb-4">{{ __('Datos de Facturación / Contacto') }}</flux:heading>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <flux:input wire:model="dni" :label="__('DNI')" type="text" maxlength="8" />
+                        <flux:input wire:model="ruc" :label="__('RUC')" type="text" maxlength="11" />
+                        <flux:input wire:model="razon_social" :label="__('Razón Social')" type="text" />
+                        <flux:input wire:model="telefono" :label="__('Teléfono')" type="text" maxlength="15" />
+                    </div>
+                </div>
+            @endif
+
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">
                     <flux:button variant="primary" type="submit" class="w-full" data-test="update-profile-button">
@@ -118,41 +153,38 @@ new #[Title('Profile settings')] #[Layout('layouts.settings')] class extends Com
             </div>
         </form>
 
-        <div class="my-10 border-t border-zinc-200 dark:border-zinc-700 pt-6">
-            <flux:heading size="lg">{{ __('Roles y Permisos') }}</flux:heading>
-            <flux:subheading>{{ __('Tus niveles de acceso en el sistema') }}</flux:subheading>
-
-            <div class="mt-6 space-y-4">
-                <div>
-                    <span class="text-sm font-medium text-zinc-500 uppercase">{{ __('Rol Actual') }}</span>
-                    <div class="mt-2 flex gap-2">
-                        @forelse(auth()->user()->roles as $role)
-                            <flux:badge color="primary" class="capitalize">{{ $role->name }}</flux:badge>
-                        @empty
-                            <span class="text-zinc-500 text-sm">{{ __('Sin rol asignado') }}</span>
-                        @endforelse
-                    </div>
-                </div>
-                
-                <div class="pt-4 border-t border-zinc-200 dark:border-zinc-700">
-                    <span class="text-sm font-medium text-zinc-500 uppercase mb-2 block">{{ __('Permisos Autorizados') }}</span>
-                    <div class="flex flex-wrap gap-2">
-                        @forelse(auth()->user()->getAllPermissions() as $permission)
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
-                                {{ $permission->name }}
-                            </span>
-                        @empty
-                            <span class="text-zinc-500 text-sm">{{ __('No cuentas con permisos adicionales.') }}</span>
-                        @endforelse
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        @if ($this->showDeleteUser)
+        @if(!auth()->user()->hasRole('cliente'))
             <div class="my-10 border-t border-zinc-200 dark:border-zinc-700 pt-6">
-                <livewire:pages::settings.delete-user-form />
+                <flux:heading size="lg">{{ __('Roles y Permisos') }}</flux:heading>
+                <flux:subheading>{{ __('Tus niveles de acceso en el sistema') }}</flux:subheading>
+
+                <div class="mt-6 space-y-4">
+                    <div>
+                        <span class="text-sm font-medium text-zinc-500 uppercase">{{ __('Rol Actual') }}</span>
+                        <div class="mt-2 flex gap-2">
+                            @forelse(auth()->user()->roles as $role)
+                                <flux:badge color="primary" class="capitalize">{{ $role->name }}</flux:badge>
+                            @empty
+                                <span class="text-zinc-500 text-sm">{{ __('Sin rol asignado') }}</span>
+                            @endforelse
+                        </div>
+                    </div>
+                    
+                    <div class="pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                        <span class="text-sm font-medium text-zinc-500 uppercase mb-2 block">{{ __('Permisos Autorizados') }}</span>
+                        <div class="flex flex-wrap gap-2">
+                            @forelse(auth()->user()->getAllPermissions() as $permission)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300">
+                                    {{ $permission->name }}
+                                </span>
+                            @empty
+                                <span class="text-zinc-500 text-sm">{{ __('No cuentas con permisos adicionales.') }}</span>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
             </div>
         @endif
+
     </x-pages::settings.layout>
 </section>

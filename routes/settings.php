@@ -9,6 +9,8 @@ Route::middleware(['auth'])->group(function () {
     
     // Rutas de cliente ("Mi Cuenta")
     Route::livewire('settings/direcciones', 'pages::settings.direcciones')->name('direcciones');
+    Route::livewire('settings/pagos', 'pages::settings.pagos')->name('pagos');
+    Route::livewire('settings/reembolso', 'pages::settings.reembolso')->name('reembolso');
     Route::livewire('settings/compras', 'pages::settings.compras')->name('compras');
     Route::livewire('settings/favoritos', 'pages::settings.favoritos')->name('favoritos');
 });
