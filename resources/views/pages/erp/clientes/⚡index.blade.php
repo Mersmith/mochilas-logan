@@ -28,6 +28,9 @@ new #[Title('Gestión de Clientes')] class extends Component {
     public string $filtroEstado = 'todos'; // activos | desactivados | todos
 
     #[Url]
+    public string $filtroPapelera = 'admitidos'; // admitidos | eliminados | todos
+
+    #[Url]
     public string $desde = '';
 
     #[Url]
@@ -41,14 +44,14 @@ new #[Title('Gestión de Clientes')] class extends Component {
      */
     public function updating($property)
     {
-        if (in_array($property, ['search', 'filtroTipoPersona', 'filtroTipoCliente', 'filtroEstado', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'filtroTipoPersona', 'filtroTipoCliente', 'filtroEstado', 'filtroPapelera', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'filtroTipoPersona', 'filtroTipoCliente', 'desde', 'hasta']);
+        $this->reset(['search', 'filtroTipoPersona', 'filtroTipoCliente', 'filtroPapelera', 'desde', 'hasta']);
         $this->filtroEstado = 'todos';
         $this->perPage = 10;
         $this->resetPage();
@@ -82,6 +85,13 @@ new #[Title('Gestión de Clientes')] class extends Component {
             $query->where('activo', false);
         }
 
+        // Filtro de papelera (Soft Deletes)
+        if ($this->filtroPapelera === 'eliminados') {
+            $query->onlyTrashed();
+        } elseif ($this->filtroPapelera === 'todos') {
+            $query->withTrashed();
+        }
+
         // Filtro de Fechas
         $query->when($this->desde, fn($q) => $q->whereDate('created_at', '>=', $this->desde))
               ->when($this->hasta, fn($q) => $q->whereDate('created_at', '<=', $this->hasta));
@@ -99,11 +109,12 @@ new #[Title('Gestión de Clientes')] class extends Component {
     }
 
     public ?int $idEliminar = null;
+    public ?int $idRestaurar = null;
 
-    public function confirmarEliminacion(int $id): void
+    public function confirmarEliminacion(int $id, bool $esPermanente = false): void
     {
         $this->idEliminar = $id;
-        $this->modal('modal-eliminar-soft')->show();
+        $this->modal($esPermanente ? 'modal-eliminar-force' : 'modal-eliminar-soft')->show();
     }
 
     public function ejecutarEliminacion(): void
@@ -112,8 +123,26 @@ new #[Title('Gestión de Clientes')] class extends Component {
         $this->modal('modal-eliminar-soft')->close();
     }
 
+    public function ejecutarEliminacionPermanente(): void
+    {
+        $this->eliminar($this->idEliminar);
+        $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function confirmarRestauracion(int $id): void
+    {
+        $this->idRestaurar = $id;
+        $this->modal('modal-restaurar')->show();
+    }
+
+    public function ejecutarRestauracion(): void
+    {
+        $this->restaurar($this->idRestaurar);
+        $this->modal('modal-restaurar')->close();
+    }
+
     /**
-     * Eliminar cliente.
+     * Eliminar cliente (soft delete o force delete con sincronización de User).
      */
     public function eliminar(int $id): void
     {
@@ -121,15 +150,47 @@ new #[Title('Gestión de Clientes')] class extends Component {
             abort(403, 'No tienes permiso para eliminar clientes.');
         }
 
-        $cliente = Cliente::findOrFail($id);
+        $cliente = Cliente::withTrashed()->findOrFail($id);
 
         if ($cliente->ventas()->count() > 0) {
             Flux::toast(variant: 'danger', text: __('No se puede eliminar el cliente porque tiene ventas registradas.'));
             return;
         }
 
-        $cliente->delete();
-        Flux::toast(variant: 'success', text: __('Cliente eliminado correctamente.'));
+        if ($cliente->trashed()) {
+            $user = $cliente->user()->withTrashed()->first();
+            $cliente->forceDelete();
+            if ($user) {
+                $user->forceDelete();
+            }
+            Flux::toast(variant: 'success', text: __('Cliente eliminado permanentemente.'));
+        } else {
+            $user = $cliente->user;
+            $cliente->delete();
+            if ($user) {
+                $user->delete();
+            }
+            Flux::toast(variant: 'success', text: __('Cliente enviado a la papelera (soft delete).'));
+        }
+    }
+
+    /**
+     * Restaurar cliente y su User asociado.
+     */
+    public function restaurar(int $id): void
+    {
+        if (! auth()->user()->can('clientes.editar')) {
+            abort(403, 'No tienes permiso para restaurar clientes.');
+        }
+
+        $cliente = Cliente::withTrashed()->findOrFail($id);
+        $cliente->restore();
+
+        if ($cliente->user()->withTrashed()->exists()) {
+            $cliente->user()->withTrashed()->first()?->restore();
+        }
+
+        Flux::toast(variant: 'success', text: __('Cliente restaurado correctamente.'));
     }
 
     /**
@@ -203,6 +264,11 @@ new #[Title('Gestión de Clientes')] class extends Component {
                 <option value="activos">{{ __('Activos') }}</option>
                 <option value="desactivados">{{ __('Desactivados') }}</option>
             </flux:select>
+            <flux:select wire:model.live="filtroPapelera" class="sm:w-44">
+                <option value="admitidos">{{ __('Admitidos') }}</option>
+                <option value="eliminados">{{ __('Eliminados') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
+            </flux:select>
         </div>
 
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -251,6 +317,7 @@ new #[Title('Gestión de Clientes')] class extends Component {
                         <th class="p-3 text-center">{{ __('Clasificación') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
                         <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
                         @can('clientes.editar')
                             <th class="p-3"></th>
                         @endcan
@@ -258,7 +325,8 @@ new #[Title('Gestión de Clientes')] class extends Component {
                 </thead>
                 <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
                     @forelse($this->clientes as $cliente)
-                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                        <tr
+                            class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $cliente->trashed() ? 'opacity-50' : '' }}">
                             <td class="p-3">
                                 <div class="flex items-center gap-3">
                                     <div class="size-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-semibold text-xs">
@@ -304,41 +372,59 @@ new #[Title('Gestión de Clientes')] class extends Component {
                             <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
                                 {{ $cliente->created_at->format('d/m/Y') }}
                             </td>
+                            <td class="p-3 text-center">
+                                @if($cliente->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('clientes.editar')
                                 <td class="p-3">
                                     <div class="flex items-center justify-end gap-2">
-                                        <flux:button
-                                            variant="ghost"
-                                            icon="{{ $cliente->activo ? 'pause-circle' : 'play-circle' }}"
-                                            size="sm"
-                                            class="{{ $cliente->activo ? 'text-amber-500 hover:text-amber-600' : 'text-emerald-500 hover:text-emerald-600' }}"
-                                            wire:click="toggleActivo({{ $cliente->id }})"
-                                            wire:confirm="{{ $cliente->activo ? '¿Desactivar este cliente?' : '¿Activar este cliente?' }}"
-                                            title="{{ $cliente->activo ? __('Desactivar') : __('Activar') }}"
-                                        />
-                                        <flux:button
-                                            variant="ghost"
-                                            icon="pencil-square"
-                                            size="sm"
-                                            href="{{ route('admin.clientes.edit', $cliente->id) }}"
-                                            wire:navigate
-                                            title="{{ __('Editar') }}"
-                                        />
-                                        <flux:button
-                                            variant="ghost"
-                                            icon="trash"
-                                            size="sm"
-                                            class="text-red-500 hover:text-red-600"
-                                            wire:click.prevent="confirmarEliminacion({{ $cliente->id }})"
-                                            title="{{ __('Eliminar') }}"
-                                        />
+                                        @if($cliente->trashed())
+                                            <flux:button variant="ghost" icon="arrow-path" size="sm"
+                                                wire:click.prevent="confirmarRestauracion({{ $cliente->id }})" />
+                                            <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $cliente->id }}, true)" />
+                                        @else
+                                            <flux:button
+                                                variant="ghost"
+                                                icon="{{ $cliente->activo ? 'pause-circle' : 'play-circle' }}"
+                                                size="sm"
+                                                class="{{ $cliente->activo ? 'text-amber-500 hover:text-amber-600' : 'text-emerald-500 hover:text-emerald-600' }}"
+                                                wire:click="toggleActivo({{ $cliente->id }})"
+                                                wire:confirm="{{ $cliente->activo ? '¿Desactivar este cliente?' : '¿Activar este cliente?' }}"
+                                                title="{{ $cliente->activo ? __('Desactivar') : __('Activar') }}"
+                                            />
+                                            <flux:button
+                                                variant="ghost"
+                                                icon="pencil-square"
+                                                size="sm"
+                                                href="{{ route('admin.clientes.edit', $cliente->id) }}"
+                                                wire:navigate
+                                                title="{{ __('Editar') }}"
+                                            />
+                                            <flux:button
+                                                variant="ghost"
+                                                icon="trash"
+                                                size="sm"
+                                                class="text-red-500 hover:text-red-600"
+                                                wire:click.prevent="confirmarEliminacion({{ $cliente->id }})"
+                                                title="{{ __('Eliminar') }}"
+                                            />
+                                        @endif
                                     </div>
                                 </td>
                             @endcan
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->can('clientes.editar') ? 6 : 5 }}"
+                            <td colspan="{{ auth()->user()->can('clientes.editar') ? 7 : 6 }}"
                                 class="text-center py-12 text-zinc-400">
                                 <div class="flex flex-col items-center gap-2">
                                     <flux:icon.face-smile class="size-8 text-zinc-300" />
@@ -363,6 +449,10 @@ new #[Title('Gestión de Clientes')] class extends Component {
         </div>
     </div>
 
-    <!-- Modal de confirmación -->
+    <!-- Modals de confirmación -->
     <x-modal-eliminar name="modal-eliminar-soft" />
+    <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
+        description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
+        :isPermanent="true" action="ejecutarEliminacionPermanente" />
+    <x-modal-restaurar />
 </div>

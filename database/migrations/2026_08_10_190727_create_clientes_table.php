@@ -36,6 +36,7 @@ return new class extends Migration
 
             $table->boolean('activo')->default(true);
             $table->timestamps();
+            $table->softDeletes();
 
             // Un user solo puede tener un perfil de cliente
             $table->unique('user_id');

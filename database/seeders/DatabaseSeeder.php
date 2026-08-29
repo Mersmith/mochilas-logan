@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
             UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
 
             // 2. Organización
-            SedeSeeder::class,
+            /*SedeSeeder::class,
             AlmacenSeeder::class,
 
             // 3. Catálogos base
@@ -45,7 +45,7 @@ class DatabaseSeeder extends Seeder
             ProductoSeeder::class,
 
             // 8. Transacciones iniciales
-            GuiaInventarioSeeder::class,
+            GuiaInventarioSeeder::class,*/
         ]);
     }
 }

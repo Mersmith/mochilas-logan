@@ -50,17 +50,19 @@ class ClientesExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMap
     {
         $this->rowCount++;
 
+        $user = $cliente->user()->withTrashed()->first();
+
         return [
             $this->rowCount,
             $cliente->id,
             $cliente->nombreMostrar(),
             $cliente->tipo_persona === 'juridica' ? 'Persona Jurídica' : 'Persona Natural',
             $cliente->esEmpresa() ? ('RUC: '.($cliente->ruc ?? '-')) : ('DNI: '.($cliente->dni ?? '-')),
-            $cliente->user->email ?? '-',
+            $user->email ?? '-',
             $cliente->telefono ?? '-',
             ucfirst($cliente->tipo_cliente),
             $cliente->listaPrecio->nombre ?? '-',
-            $cliente->activo ? 'Activo' : 'Inactivo',
+            $cliente->deleted_at ? 'Eliminado' : ($cliente->activo ? 'Activo' : 'Inactivo'),
             $cliente->created_at ? $cliente->created_at->format('d/m/Y H:i') : '-',
         ];
     }

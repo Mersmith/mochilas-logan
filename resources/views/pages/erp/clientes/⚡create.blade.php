@@ -4,6 +4,7 @@ use App\Models\Cliente;
 use App\Models\ListaPrecio;
 use App\Models\User;
 use Flux\Flux;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -27,7 +28,6 @@ new #[Title('Nuevo Cliente')] class extends Component {
 
     public function mount()
     {
-        // Asignar lista de precios por defecto (la primera que encuentre)
         $this->lista_precio_id = ListaPrecio::first()?->id;
     }
 
@@ -55,7 +55,6 @@ new #[Title('Nuevo Cliente')] class extends Component {
             'telefono'        => 'nullable|string|max:15',
         ];
 
-        // Validaciones condicionales según tipo de persona
         if ($this->tipo_persona === 'natural') {
             $rules['dni'] = 'required|string|size:8|unique:clientes,dni';
             $this->ruc = null;
@@ -68,31 +67,33 @@ new #[Title('Nuevo Cliente')] class extends Component {
 
         $this->validate($rules);
 
-        // Crear User
-        $user = User::create([
-            'name'     => $this->nombre,
-            'email'    => $this->email,
-            'password' => bcrypt($this->password),
-            'activo'   => $this->activo,
-        ]);
+        DB::transaction(function () {
+            // Crear User
+            $user = User::create([
+                'name'     => $this->nombre,
+                'email'    => $this->email,
+                'password' => bcrypt($this->password),
+                'activo'   => $this->activo,
+            ]);
 
-        // Asignar rol de cliente
-        $user->assignRole('cliente');
+            // Asignar rol de cliente
+            $user->assignRole('cliente');
 
-        // Crear Perfil Cliente
-        Cliente::create([
-            'user_id'         => $user->id,
-            'tipo_persona'    => $this->tipo_persona,
-            'tipo_cliente'    => $this->tipo_cliente,
-            'lista_precio_id' => $this->lista_precio_id,
-            'dni'             => $this->dni,
-            'ruc'             => $this->ruc,
-            'razon_social'    => $this->razon_social,
-            'telefono'        => $this->telefono,
-            'activo'          => $this->activo,
-        ]);
+            // Crear Perfil Cliente
+            Cliente::create([
+                'user_id'         => $user->id,
+                'tipo_persona'    => $this->tipo_persona,
+                'tipo_cliente'    => $this->tipo_cliente,
+                'lista_precio_id' => $this->lista_precio_id,
+                'dni'             => $this->dni,
+                'ruc'             => $this->ruc,
+                'razon_social'    => $this->razon_social,
+                'telefono'        => $this->telefono,
+                'activo'          => $this->activo,
+            ]);
+        });
 
-        Flux::toast(variant: 'success', text: 'Cliente creado correctamente.');
+        Flux::toast(variant: 'success', text: __('Cliente creado correctamente.'));
         return redirect()->route('admin.clientes.index');
     }
 }; ?>

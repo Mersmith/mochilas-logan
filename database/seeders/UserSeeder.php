@@ -25,7 +25,7 @@ class UserSeeder extends Seeder
         );
 
         // ── Admin general del panel ──────────────────────────────────
-        $admin = User::firstOrCreate(
+        /*$admin = User::firstOrCreate(
             ['email' => 'admin@logan.com'],
             [
                 'name' => 'Administrador Logan',
@@ -72,6 +72,6 @@ class UserSeeder extends Seeder
 
         foreach ($customers as $customer) {
             $customer->assignRole('cliente');
-        }
+        }*/
     }
 }
