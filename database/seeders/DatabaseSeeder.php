@@ -42,10 +42,10 @@ class DatabaseSeeder extends Seeder
             ClienteSeeder::class,
 
             // 7. Entidades complejas
-            /*ProductoSeeder::class,
+            ProductoSeeder::class,
 
             // 8. Transacciones iniciales
-            GuiaInventarioSeeder::class,*/
+            GuiaInventarioSeeder::class,
         ]);
     }
 }

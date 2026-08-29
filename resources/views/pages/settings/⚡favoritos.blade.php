@@ -41,10 +41,10 @@ new #[Title('Favoritos')] #[Layout('layouts.settings')] class extends Component 
 
     <x-pages::settings.layout :heading="__('Mis favoritos')" :subheading="__('Tus productos guardados')">
         
-        @if($favoritos->count() > 0)
+        @if(count($favoritos) > 0)
             <div class="space-y-4">
                 <div class="flex items-center justify-between mb-4">
-                    <span class="text-sm text-zinc-500 font-medium">{{ $favoritos->count() }} producto(s)</span>
+                    <span class="text-sm text-zinc-500 font-medium">{{ count($favoritos) }} producto(s)</span>
                 </div>
 
                 @foreach($favoritos as $producto)
