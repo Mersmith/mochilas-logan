@@ -94,6 +94,7 @@ new #[Title('Categorías')] class extends Component {
     }
 
     public ?int $idEliminar = null;
+    public ?int $idRestaurar = null;
 
     public function confirmarEliminacion(int $id, bool $esPermanente = false): void
     {
@@ -111,6 +112,18 @@ new #[Title('Categorías')] class extends Component {
     {
         $this->eliminar($this->idEliminar);
         $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function confirmarRestauracion(int $id): void
+    {
+        $this->idRestaurar = $id;
+        $this->modal('modal-restaurar')->show();
+    }
+
+    public function ejecutarRestauracion(): void
+    {
+        $this->restaurar($this->idRestaurar);
+        $this->modal('modal-restaurar')->close();
     }
 
     public function eliminar(int $id): void
@@ -193,7 +206,7 @@ new #[Title('Categorías')] class extends Component {
             <flux:select wire:model.live="filtroPapelera" class="sm:w-40">
                 <option value="admitidos">{{ __('Admitidos') }}</option>
                 <option value="eliminados">{{ __('Eliminados') }}</option>
-                <option value="todos">{{ __('Todos') }}</option>
+                <option value="todos">{{ __('Papelera + Admitidos') }}</option>
             </flux:select>
         </div>
 
@@ -275,8 +288,7 @@ new #[Title('Categorías')] class extends Component {
                                     <div class="flex items-center justify-end gap-2">
                                         @if($categoria->trashed())
                                             <flux:button variant="ghost" icon="arrow-path" size="sm"
-                                                wire:click.prevent="restaurar({{ $categoria->id }})"
-                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                                wire:click.prevent="confirmarRestauracion({{ $categoria->id }})" />
                                             <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
                                                 wire:click.prevent="confirmarEliminacion({{ $categoria->id }}, true)" />
                                         @else
@@ -320,4 +332,5 @@ new #[Title('Categorías')] class extends Component {
     <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
         description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
         :isPermanent="true" action="ejecutarEliminacionPermanente" />
+    <x-modal-restaurar />
 </div>

@@ -52,7 +52,7 @@ new #[Title('Editar Categoría')] class extends Component {
 
         $this->validate([
             'categoria_padre_id' => 'nullable|exists:categorias,id',
-            'codigo' => 'nullable|string|max:50',
+            'codigo' => 'required|string|max:50|unique:categorias,codigo,' . $this->categoria->id,
             'nombre' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:categorias,slug,' . $this->categoria->id,
             'descripcion' => 'nullable|string',
@@ -62,7 +62,7 @@ new #[Title('Editar Categoría')] class extends Component {
 
         $this->categoria->update([
             'categoria_padre_id' => $this->categoria_padre_id,
-            'codigo' => $this->codigo,
+            'codigo' => trim($this->codigo),
             'nombre' => $this->nombre,
             'slug' => $this->slug,
             'descripcion' => $this->descripcion,
@@ -115,7 +115,7 @@ new #[Title('Editar Categoría')] class extends Component {
 
             <flux:field>
                 <flux:label>{{ __('Código') }}</flux:label>
-                <flux:input wire:model="codigo" placeholder="Ej. CAT001" />
+                <flux:input wire:model="codigo" placeholder="Ej. CAT001" required />
                 <flux:error name="codigo" />
             </flux:field>
 

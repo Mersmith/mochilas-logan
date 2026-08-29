@@ -76,6 +76,7 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
     }
 
     public ?int $idEliminar = null;
+    public ?int $idRestaurar = null;
 
     public function confirmarEliminacion(int $id, bool $esPermanente = false): void
     {
@@ -93,6 +94,18 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
     {
         $this->eliminar($this->idEliminar);
         $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function confirmarRestauracion(int $id): void
+    {
+        $this->idRestaurar = $id;
+        $this->modal('modal-restaurar')->show();
+    }
+
+    public function ejecutarRestauracion(): void
+    {
+        $this->restaurar($this->idRestaurar);
+        $this->modal('modal-restaurar')->close();
     }
 
     public function eliminar(int $id): void
@@ -208,6 +221,8 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
                         <th class="p-3">{{ __('Nombre') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
                         @can('atributos.editar')
                             <th class="p-3"></th>
                         @endcan
@@ -230,13 +245,26 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                                     </div>
                                 @endif
                             </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $atributo->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($atributo->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('atributos.editar')
                                 <td class="p-3">
                                     <div class="flex items-center justify-end gap-2">
                                         @if($atributo->trashed())
                                             <flux:button variant="ghost" icon="arrow-path" size="sm"
-                                                wire:click.prevent="restaurar({{ $atributo->id }})"
-                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                                wire:click.prevent="confirmarRestauracion({{ $atributo->id }})" />
                                             <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
                                                 wire:click.prevent="confirmarEliminacion({{ $atributo->id }}, true)" />
                                         @else
@@ -251,7 +279,7 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->can('atributos.editar') ? 3 : 2 }}"
+                            <td colspan="{{ auth()->user()->can('atributos.editar') ? 5 : 4 }}"
                                 class="text-center py-12 text-zinc-400">
                                 <div class="flex flex-col items-center gap-2">
                                     <flux:icon.face-smile class="size-8 text-zinc-300" />
@@ -280,4 +308,5 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
     <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
         description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
         :isPermanent="true" action="ejecutarEliminacionPermanente" />
+    <x-modal-restaurar />
 </div>

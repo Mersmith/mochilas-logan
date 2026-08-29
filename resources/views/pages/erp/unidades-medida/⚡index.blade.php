@@ -77,6 +77,7 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
     }
 
     public ?int $idEliminar = null;
+    public ?int $idRestaurar = null;
 
     public function confirmarEliminacion(int $id, bool $esPermanente = false): void
     {
@@ -94,6 +95,18 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
     {
         $this->eliminar($this->idEliminar);
         $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function confirmarRestauracion(int $id): void
+    {
+        $this->idRestaurar = $id;
+        $this->modal('modal-restaurar')->show();
+    }
+
+    public function ejecutarRestauracion(): void
+    {
+        $this->restaurar($this->idRestaurar);
+        $this->modal('modal-restaurar')->close();
     }
 
     public function eliminar(int $id): void
@@ -210,6 +223,8 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
                         <th class="p-3">{{ __('Nombre') }}</th>
                         <th class="p-3">{{ __('Abreviación') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
+                        <th class="p-3 text-center">{{ __('Creado') }}</th>
+                        <th class="p-3 text-center">{{ __('Registro') }}</th>
                         @can('unidades-medida.editar')
                             <th class="p-3"></th>
                         @endcan
@@ -235,13 +250,26 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
                                     </div>
                                 @endif
                             </td>
+                            <td class="p-3 text-center text-zinc-600 dark:text-zinc-400">
+                                {{ $unidad->created_at->format('d/m/Y') }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($unidad->trashed())
+                                    <div class="flex justify-center" title="{{ __('Eliminado') }}">
+                                        <flux:icon.trash class="size-5 text-red-500" />
+                                    </div>
+                                @else
+                                    <div class="flex justify-center" title="{{ __('Admitido') }}">
+                                        <flux:icon.check-badge class="size-5 text-blue-500" />
+                                    </div>
+                                @endif
+                            </td>
                             @can('unidades-medida.editar')
                                 <td class="p-3">
                                     <div class="flex items-center justify-end gap-2">
                                         @if($unidad->trashed())
                                             <flux:button variant="ghost" icon="arrow-path" size="sm"
-                                                wire:click.prevent="restaurar({{ $unidad->id }})"
-                                                wire:confirm="¿Está seguro de restaurar este registro?" />
+                                                wire:click.prevent="confirmarRestauracion({{ $unidad->id }})" />
                                             <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
                                                 wire:click.prevent="confirmarEliminacion({{ $unidad->id }}, true)" />
                                         @else
@@ -256,7 +284,7 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ auth()->user()->can('unidades-medida.editar') ? 4 : 3 }}"
+                            <td colspan="{{ auth()->user()->can('unidades-medida.editar') ? 6 : 5 }}"
                                 class="text-center py-12 text-zinc-400">
                                 <div class="flex flex-col items-center gap-2">
                                     <flux:icon.face-smile class="size-8 text-zinc-300" />
@@ -285,4 +313,5 @@ new #[Title('Mantenimiento de Unidades de Medida')] class extends Component {
     <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
         description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
         :isPermanent="true" action="ejecutarEliminacionPermanente" />
+    <x-modal-restaurar />
 </div>

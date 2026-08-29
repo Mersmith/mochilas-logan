@@ -102,6 +102,7 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     }
 
     public ?int $idEliminar = null;
+    public ?int $idRestaurar = null;
 
     public function confirmarEliminacion(int $id, bool $esPermanente = false): void
     {
@@ -119,6 +120,18 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     {
         $this->eliminar($this->idEliminar);
         $this->modal('modal-eliminar-force')->close();
+    }
+
+    public function confirmarRestauracion(int $id): void
+    {
+        $this->idRestaurar = $id;
+        $this->modal('modal-restaurar')->show();
+    }
+
+    public function ejecutarRestauracion(): void
+    {
+        $this->restaurar($this->idRestaurar);
+        $this->modal('modal-restaurar')->close();
     }
 
     public function eliminar(int $id): void
@@ -308,8 +321,7 @@ new #[Title('Gestión de Almacenes')] class extends Component {
                                     <div class="flex items-center justify-end gap-2">
                                         @if($almacen->trashed())
                                             <flux:button variant="ghost" icon="arrow-path" size="sm"
-                                                wire:click.prevent="restaurar({{ $almacen->id }})"
-                                                wire:confirm="¿Está seguro de restaurar este almacén?" />
+                                                wire:click.prevent="confirmarRestauracion({{ $almacen->id }})" />
                                             <flux:button variant="ghost" icon="trash" size="sm" class="text-red-500 hover:text-red-600"
                                                 wire:click.prevent="confirmarEliminacion({{ $almacen->id }}, true)" />
                                         @else
@@ -354,4 +366,5 @@ new #[Title('Gestión de Almacenes')] class extends Component {
     <x-modal-eliminar name="modal-eliminar-force" title="¿Eliminar permanentemente?"
         description="Esta acción es irreversible y eliminará el registro de la base de datos de forma permanente."
         :isPermanent="true" action="ejecutarEliminacionPermanente" />
+    <x-modal-restaurar />
 </div>
