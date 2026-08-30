@@ -168,12 +168,15 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
             $colors = [];
             foreach ($product->variacions as $v) {
                 foreach ($v->valores as $val) {
-                    if (strtolower($val->atributo->nombre) === 'color') {
-                        $colors[] = $val->valor;
+                    if (str_contains(strtolower($val->atributo->nombre), 'color')) {
+                        $colors[$val->valor] = [
+                            'nombre' => $val->valor,
+                            'hex' => $val->codigo_color_hex,
+                        ];
                     }
                 }
             }
-            $product->colores_disponibles = array_unique($colors);
+            $product->colores_disponibles = array_values($colors);
 
             return $product;
         });
@@ -324,10 +327,22 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
 
                         <!-- Contenido Superior -->
                         <div>
-                            <!-- Placeholder de Imagen Premium -->
+                            <!-- Imagen del Producto / Fallback -->
                             <div class="aspect-[4/3] w-full bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 relative overflow-hidden flex items-center justify-center border-b border-zinc-100 dark:border-zinc-800/50">
-                                <flux:icon name="archive-box" class="size-16 text-zinc-300 dark:text-zinc-700 group-hover:scale-110 transition-transform duration-300" />
-                                <div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                @if($p->hasMedia('imagen_principal'))
+                                    <img src="{{ $p->getFirstMediaUrl('imagen_principal', 'card') ?: $p->getFirstMediaUrl('imagen_principal') }}" 
+                                         alt="{{ $p->nombre }}" 
+                                         class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500" 
+                                         loading="lazy">
+                                @elseif($p->hasMedia('galeria'))
+                                    <img src="{{ $p->getFirstMediaUrl('galeria', 'card') ?: $p->getFirstMediaUrl('galeria') }}" 
+                                         alt="{{ $p->nombre }}" 
+                                         class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500" 
+                                         loading="lazy">
+                                @else
+                                    <flux:icon name="archive-box" class="size-16 text-zinc-300 dark:text-zinc-700 group-hover:scale-110 transition-transform duration-300" />
+                                @endif
+                                <div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
                             </div>
 
                             <!-- Info del Producto -->
@@ -348,24 +363,14 @@ new #[Title('Catálogo de Mochilas'), Layout('layouts.publico')] class extends C
                                 <!-- Variaciones de Colores -->
                                 @if(!empty($p->colores_disponibles))
                                     <div class="flex items-center gap-1.5 pt-2">
-                                        @foreach($p->colores_disponibles as $colName)
+                                        @foreach($p->colores_disponibles as $col)
                                             @php
-                                                // Mapeo simple de colores comunes a clases de Tailwind
-                                                $colMap = [
-                                                    'rojo' => 'bg-red-500',
-                                                    'azul' => 'bg-blue-500',
-                                                    'verde' => 'bg-green-500',
-                                                    'amarillo' => 'bg-yellow-400',
-                                                    'negro' => 'bg-black border border-zinc-700',
-                                                    'blanco' => 'bg-white border border-zinc-300',
-                                                    'gris' => 'bg-zinc-400',
-                                                    'celeste' => 'bg-sky-400',
-                                                    'rosado' => 'bg-pink-400',
-                                                    'naranja' => 'bg-orange-500',
-                                                ];
-                                                $colClass = $colMap[strtolower(trim($colName))] ?? 'bg-gradient-to-r from-zinc-300 to-zinc-500';
+                                                $cName = is_array($col) ? $col['nombre'] : $col;
+                                                $cHex = is_array($col) ? ($col['hex'] ?? null) : null;
                                             @endphp
-                                            <span class="size-3.5 rounded-full inline-block {{ $colClass }} shadow-inner" title="{{ $colName }}"></span>
+                                            <span class="size-3.5 rounded-full inline-block border border-black/10 dark:border-white/20 shadow-inner" 
+                                                  style="{{ $cHex ? 'background-color: ' . $cHex . ';' : 'background-color: #71717a;' }}"
+                                                  title="{{ $cName }}"></span>
                                         @endforeach
                                     </div>
                                 @endif

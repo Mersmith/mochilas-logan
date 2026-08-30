@@ -11,15 +11,25 @@ new #[Title('Nuevo Atributo')] class extends Component {
     public bool $activo = true;
     public array $valores = [];
     public string $nuevoValor = '';
+    public ?string $nuevoColorHex = '#3b82f6';
 
     public function agregarValor()
     {
         $this->validate([
             'nuevoValor' => 'required|string|max:255',
+            'nuevoColorHex' => 'nullable|string|max:20',
         ]);
         
-        if (!in_array($this->nuevoValor, $this->valores)) {
-            $this->valores[] = $this->nuevoValor;
+        $esColor = str_contains(strtolower($this->nombre), 'color');
+        $val = trim($this->nuevoValor);
+
+        // Check if not already in list
+        $exists = collect($this->valores)->contains('valor', $val);
+        if (!$exists) {
+            $this->valores[] = [
+                'valor' => $val,
+                'codigo_color_hex' => $esColor ? ($this->nuevoColorHex ?: '#000000') : null,
+            ];
         }
         $this->nuevoValor = '';
     }
@@ -48,10 +58,11 @@ new #[Title('Nuevo Atributo')] class extends Component {
             'activo' => $this->activo,
         ]);
 
-        foreach ($this->valores as $valor) {
+        foreach ($this->valores as $item) {
             AtributoValor::create([
                 'atributo_id' => $atributo->id,
-                'valor' => $valor,
+                'valor' => $item['valor'],
+                'codigo_color_hex' => $item['codigo_color_hex'] ?? null,
             ]);
         }
 
@@ -80,17 +91,26 @@ new #[Title('Nuevo Atributo')] class extends Component {
 
         <flux:field>
             <flux:label>{{ __('Valores del atributo') }}</flux:label>
-            <div class="flex gap-2 mt-1">
-                <flux:input wire:model="nuevoValor" placeholder="Ej. Rojo, XL..." class="flex-1" wire:keydown.enter.prevent="agregarValor" />
-                <flux:button wire:click.prevent="agregarValor">{{ __('Agregar') }}</flux:button>
+            <div class="flex items-center gap-2 mt-1">
+                @if(str_contains(strtolower($nombre), 'color'))
+                    <div class="flex items-center gap-2 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 bg-zinc-50 dark:bg-zinc-800 shrink-0">
+                        <input type="color" wire:model.live="nuevoColorHex" class="w-7 h-7 rounded-md cursor-pointer border-0 p-0 bg-transparent" title="Elegir color" />
+                        <span class="text-xs font-mono text-zinc-500 uppercase">{{ $nuevoColorHex }}</span>
+                    </div>
+                @endif
+                <flux:input wire:model="nuevoValor" placeholder="{{ str_contains(strtolower($nombre), 'color') ? 'Nombre del color (Ej. Rojo Carmín, Azul Marino...)' : 'Ej. XL, Cuero...' }}" class="flex-1" wire:keydown.enter.prevent="agregarValor" />
+                <flux:button wire:click.prevent="agregarValor" icon="plus">{{ __('Agregar') }}</flux:button>
             </div>
             <flux:error name="nuevoValor" />
             
             @if(count($valores) > 0)
                 <div class="flex flex-wrap gap-2 mt-4">
-                    @foreach($valores as $index => $valor)
-                        <span class="inline-flex items-center gap-1.5 py-1.5 pl-3 pr-2 rounded-full text-sm font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {{ $valor }}
+                    @foreach($valores as $index => $item)
+                        <span class="inline-flex items-center gap-2 py-1.5 pl-2.5 pr-2 rounded-full text-sm font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                            @if(!empty($item['codigo_color_hex']))
+                                <span class="size-3.5 rounded-full border border-black/20 dark:border-white/20 shadow-inner" style="background-color: {{ $item['codigo_color_hex'] }};"></span>
+                            @endif
+                            <span>{{ $item['valor'] }}</span>
                             <button type="button" wire:click="removerValor({{ $index }})" class="shrink-0 h-4 w-4 rounded-full inline-flex items-center justify-center text-zinc-400 hover:bg-zinc-200 hover:text-zinc-500 focus:outline-none focus:bg-zinc-500 focus:text-white">
                                 <flux:icon.x-mark class="size-3" />
                             </button>

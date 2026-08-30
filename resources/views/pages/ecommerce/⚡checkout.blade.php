@@ -91,6 +91,11 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
             $descAttr = $variacion->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(' | ');
 
+            $imagenUrl = $variacion->producto->getFirstMediaUrl('imagen_principal', 'thumb') 
+                ?: $variacion->producto->getFirstMediaUrl('imagen_principal')
+                ?: $variacion->producto->getFirstMediaUrl('galeria', 'thumb')
+                ?: $variacion->producto->getFirstMediaUrl('galeria');
+
             $items[$key] = [
                 'key' => $key,
                 'variacion_id' => $variacion->id,
@@ -98,6 +103,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                 'marca' => $variacion->producto->marca->nombre,
                 'sku' => $variacion->sku,
                 'detalles' => $descAttr,
+                'imagen_url' => $imagenUrl,
                 'cantidad' => min($item['cantidad'], $stock),
                 'stock' => $stock,
                 'precio_base' => $basePrice,
@@ -434,8 +440,12 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                 <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @foreach($this->items as $item)
                         <div class="py-3 flex items-center gap-4 first:pt-0 last:pb-0">
-                            <div class="w-14 h-14 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-lg flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800">
-                                <flux:icon name="archive-box" class="size-6 text-zinc-300 dark:text-zinc-700" />
+                            <div class="w-14 h-14 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-lg flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 overflow-hidden">
+                                @if(!empty($item['imagen_url']))
+                                    <img src="{{ $item['imagen_url'] }}" alt="{{ $item['nombre'] }}" class="w-full h-full object-cover" />
+                                @else
+                                    <flux:icon name="archive-box" class="size-6 text-zinc-300 dark:text-zinc-700" />
+                                @endif
                             </div>
                             <div class="flex-1 min-w-0">
                                 <div class="text-sm font-bold text-zinc-900 dark:text-white truncate">{{ $item['nombre'] }}</div>

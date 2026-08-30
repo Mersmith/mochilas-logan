@@ -50,21 +50,27 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
 
             $descAttr = $variacion->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(' | ');
 
+            $imagenUrl = $variacion->producto->getFirstMediaUrl('imagen_principal', 'thumb') 
+                ?: $variacion->producto->getFirstMediaUrl('imagen_principal')
+                ?: $variacion->producto->getFirstMediaUrl('galeria', 'thumb')
+                ?: $variacion->producto->getFirstMediaUrl('galeria');
+
             $items[$key] = [
                 'key' => $key,
+                'producto_id' => $variacion->producto->id,
+                'slug' => \Illuminate\Support\Str::slug($variacion->producto->nombre),
                 'variacion_id' => $variacion->id,
                 'nombre' => $variacion->producto->nombre,
                 'marca' => $variacion->producto->marca->nombre,
                 'sku' => $variacion->sku,
                 'detalles' => $descAttr,
+                'imagen_url' => $imagenUrl,
                 'cantidad' => min($item['cantidad'], $stock),
                 'stock' => $stock,
                 'precio_base' => $basePrice,
                 'precio_final' => $finalPrice,
                 'porcentaje_descuento' => $pct,
                 'subtotal' => round($finalPrice * min($item['cantidad'], $stock), 2),
-                'producto_id' => $variacion->producto->id,
-                'slug' => \Illuminate\Support\Str::slug($variacion->producto->nombre),
             ];
         }
 
@@ -165,10 +171,14 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
             <div class="lg:col-span-2 space-y-4">
                 @foreach($this->items as $item)
                     <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 flex gap-5 items-start relative group transition-all hover:shadow-sm">
-                        <!-- Imagen placeholder -->
-                        <div class="w-24 h-24 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-xl flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800">
-                            <a href="{{ route('producto.detalle', ['producto' => $item['producto_id'], 'slug' => $item['slug']]) }}" wire:navigate>
-                                <flux:icon name="archive-box" class="size-10 text-zinc-300 dark:text-zinc-700" />
+                        <!-- Imagen del producto -->
+                        <div class="w-24 h-24 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-xl flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 overflow-hidden">
+                            <a href="{{ route('producto.detalle', ['producto' => $item['producto_id'], 'slug' => $item['slug']]) }}" wire:navigate class="w-full h-full flex items-center justify-center">
+                                @if(!empty($item['imagen_url']))
+                                    <img src="{{ $item['imagen_url'] }}" alt="{{ $item['nombre'] }}" class="w-full h-full object-cover" />
+                                @else
+                                    <flux:icon name="archive-box" class="size-10 text-zinc-300 dark:text-zinc-700" />
+                                @endif
                             </a>
                         </div>
 

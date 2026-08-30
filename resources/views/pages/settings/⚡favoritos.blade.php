@@ -72,9 +72,11 @@ new #[Title('Favoritos')] #[Layout('layouts.settings')] class extends Component 
                         <div class="flex items-start gap-4">
                             <flux:checkbox wire:model="selected" value="{{ $producto->id }}" class="mt-2" />
                             
-                            <a href="{{ route('producto.detalle', ['producto' => $producto->id, 'slug' => \Illuminate\Support\Str::slug($producto->nombre)]) }}" wire:navigate class="shrink-0 size-24 sm:size-32 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center border border-zinc-200 dark:border-zinc-700">
-                                @if($producto->getFirstMediaUrl('productos'))
-                                    <img src="{{ $producto->getFirstMediaUrl('productos') }}" alt="{{ $producto->nombre }}" class="w-full h-full object-cover rounded-lg" />
+                            <a href="{{ route('producto.detalle', ['producto' => $producto->id, 'slug' => \Illuminate\Support\Str::slug($producto->nombre)]) }}" wire:navigate class="shrink-0 size-24 sm:size-32 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                                @if($producto->hasMedia('imagen_principal'))
+                                    <img src="{{ $producto->getFirstMediaUrl('imagen_principal', 'thumb') ?: $producto->getFirstMediaUrl('imagen_principal') }}" alt="{{ $producto->nombre }}" class="w-full h-full object-cover rounded-lg" />
+                                @elseif($producto->hasMedia('galeria'))
+                                    <img src="{{ $producto->getFirstMediaUrl('galeria', 'thumb') ?: $producto->getFirstMediaUrl('galeria') }}" alt="{{ $producto->nombre }}" class="w-full h-full object-cover rounded-lg" />
                                 @else
                                     <flux:icon name="archive-box" class="size-10 text-zinc-300 dark:text-zinc-600" />
                                 @endif

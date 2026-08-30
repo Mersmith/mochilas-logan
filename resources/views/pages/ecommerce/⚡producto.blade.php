@@ -78,8 +78,10 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
             }
         }
         
-        if ($this->producto->getFirstMediaUrl('productos')) {
-            $this->currentImage = $this->producto->getFirstMediaUrl('productos');
+        if ($this->producto->hasMedia('imagen_principal')) {
+            $this->currentImage = $this->producto->getFirstMediaUrl('imagen_principal');
+        } elseif ($this->producto->hasMedia('galeria')) {
+            $this->currentImage = $this->producto->getFirstMediaUrl('galeria');
         }
     }
 
@@ -92,12 +94,12 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         $attributes = [];
         foreach ($this->producto->variacions as $v) {
             foreach ($v->valores as $val) {
-                $attributes[$val->atributo->nombre][] = $val->valor;
+                $attrName = $val->atributo->nombre;
+                $attributes[$attrName][$val->valor] = [
+                    'valor' => $val->valor,
+                    'codigo_color_hex' => $val->codigo_color_hex,
+                ];
             }
-        }
-        
-        foreach ($attributes as $name => $values) {
-            $attributes[$name] = array_unique($values);
         }
 
         return $attributes;
@@ -245,11 +247,14 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
             </div>
 
             <!-- Miniaturas -->
-            @if($this->producto->getMedia('productos')->count() > 0)
+            @php
+                $todasLasImagenes = $this->producto->getMedia('imagen_principal')->merge($this->producto->getMedia('galeria'));
+            @endphp
+            @if($todasLasImagenes->count() > 1)
                 <div class="grid grid-cols-4 gap-4">
-                    @foreach($this->producto->getMedia('productos') as $media)
-                        <button wire:click="$set('currentImage', '{{ $media->getUrl() }}')" class="aspect-square bg-zinc-100 dark:bg-zinc-950 border {{ $currentImage === $media->getUrl() ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-900 dark:ring-white' : 'border-zinc-300 dark:border-zinc-800' }} rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-all">
-                            <img src="{{ $media->getUrl() }}" alt="Miniatura" class="w-full h-full object-cover" />
+                    @foreach($todasLasImagenes as $media)
+                        <button type="button" wire:click="$set('currentImage', '{{ $media->getUrl() }}')" class="aspect-square bg-zinc-100 dark:bg-zinc-950 border {{ $currentImage === $media->getUrl() ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-900 dark:ring-white' : 'border-zinc-300 dark:border-zinc-800' }} rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-all">
+                            <img src="{{ $media->getUrl('thumb') ?: $media->getUrl() }}" alt="Miniatura" class="w-full h-full object-cover" />
                         </button>
                     @endforeach
                 </div>
@@ -285,30 +290,21 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                             <flux:text size="sm" class="font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">{{ $name }}</flux:text>
                             
                             <div class="flex flex-wrap gap-2">
-                                @foreach($values as $val)
+                                @foreach($values as $valKey => $valData)
                                     @php
-                                        $isSelected = ($selectedAttributes[$name] ?? '') === $val;
+                                        $val = is_array($valData) ? $valData['valor'] : $valData;
+                                        $hexColor = is_array($valData) ? ($valData['codigo_color_hex'] ?? null) : null;
+                                        $isSelected = isset($selectedAttributes[$name]) && $selectedAttributes[$name] === $val;
                                     @endphp
-                                    @if(strtolower($name) === 'color')
-                                        @php
-                                            $colMap = [
-                                                'rojo' => 'bg-red-500',
-                                                'azul' => 'bg-blue-500',
-                                                'verde' => 'bg-green-500',
-                                                'amarillo' => 'bg-yellow-400',
-                                                'negro' => 'bg-black border border-zinc-700',
-                                                'blanco' => 'bg-white border border-zinc-300',
-                                                'gris' => 'bg-zinc-400',
-                                                'celeste' => 'bg-sky-400',
-                                                'rosado' => 'bg-pink-400',
-                                                'naranja' => 'bg-orange-500',
-                                            ];
-                                            $colClass = $colMap[strtolower(trim($val))] ?? 'bg-gradient-to-r from-zinc-300 to-zinc-500';
-                                        @endphp
-                                        <button wire:click.prevent="selectOption('{{ $name }}', '{{ $val }}')" class="size-8 rounded-full {{ $colClass }} relative focus:outline-none transition-all {{ $isSelected ? 'ring-4 ring-offset-2 ring-black dark:ring-white scale-110 shadow-lg' : 'hover:scale-105' }}" title="{{ $val }}">
+
+                                    @if(str_contains(strtolower($name), 'color'))
+                                        <button wire:click.prevent="selectOption('{{ $name }}', '{{ $val }}')" 
+                                                class="size-8 rounded-full relative focus:outline-none transition-all shadow-inner border border-black/10 dark:border-white/20 {{ $isSelected ? 'ring-4 ring-offset-2 ring-black dark:ring-white scale-110 shadow-lg' : 'hover:scale-105' }}" 
+                                                style="{{ $hexColor ? 'background-color: ' . $hexColor . ';' : 'background-color: #71717a;' }}"
+                                                title="{{ $val }}">
                                             @if($isSelected)
                                                 <span class="absolute inset-0 flex items-center justify-center">
-                                                    <flux:icon name="check" class="size-4 {{ strtolower($val) === 'blanco' ? 'text-black' : 'text-white' }} font-bold" />
+                                                    <flux:icon name="check" class="size-4 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] font-bold" />
                                                 </span>
                                             @endif
                                         </button>
