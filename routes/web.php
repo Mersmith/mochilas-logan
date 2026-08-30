@@ -39,7 +39,7 @@ Route::get('dashboard', function () {
     return redirect()->route('login');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
 
 // Crear Storage Link
 Route::get('/symlink', function () {
@@ -63,18 +63,17 @@ Route::get('/optimize-app', function () {
     return '¡Aplicación optimizada con éxito!';
 });
 
-// Ejecutar migraciones completas y seeders
+// Ejecutar migrate:fresh --seed (Elimina todas las tablas y las crea desde cero con seeders)
 Route::get('/run-migrations', function () {
     try {
-        // Opción segura y directa:
-        Artisan::call('migrate', ['--force' => true]);
+        Artisan::call('migrate:fresh', [
+            '--seed' => true,
+            '--force' => true,
+        ]);
         $output = Artisan::output();
 
-        Artisan::call('db:seed', ['--force' => true]);
-        $output .= "\n".Artisan::output();
-
-        return '<pre>'.$output.'</pre><br>¡Tablas y seeders creados exitosamente!';
+        return '<pre>' . $output . '</pre><br>¡Base de datos reseteada y creada desde cero con seeds exitosamente!';
     } catch (Throwable $e) {
-        return '<pre>'.$e->getMessage()."\n".$e->getTraceAsString().'</pre>';
+        return '<pre>' . $e->getMessage() . "\n" . $e->getTraceAsString() . '</pre>';
     }
 });
