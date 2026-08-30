@@ -96,9 +96,11 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         foreach ($this->producto->variacions as $v) {
             foreach ($v->valores as $val) {
                 $attrName = $val->atributo->nombre;
+                $tipoSelector = $val->atributo->tipo_selector ?? 'texto';
                 $attributes[$attrName][$val->valor] = [
                     'valor' => $val->valor,
                     'codigo_color_hex' => $val->codigo_color_hex,
+                    'tipo_selector' => $tipoSelector,
                 ];
             }
         }
@@ -250,10 +252,12 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                                     @php
                                         $val = is_array($valData) ? $valData['valor'] : $valData;
                                         $hexColor = is_array($valData) ? ($valData['codigo_color_hex'] ?? null) : null;
+                                        $tipoSelector = is_array($valData) ? ($valData['tipo_selector'] ?? 'texto') : 'texto';
+                                        $isColor = $tipoSelector === 'color_hex' || str_contains(strtolower($name), 'color');
                                         $isSelected = isset($selectedAttributes[$name]) && $selectedAttributes[$name] === $val;
                                     @endphp
 
-                                    @if(str_contains(strtolower($name), 'color'))
+                                    @if($isColor)
                                         <button wire:click.prevent="selectOption('{{ $name }}', '{{ $val }}')" 
                                                 class="size-8 rounded-full relative focus:outline-none transition-all shadow-inner border border-black/10 dark:border-white/20 {{ $isSelected ? 'ring-4 ring-offset-2 ring-black dark:ring-white scale-110 shadow-lg' : 'hover:scale-105' }}" 
                                                 style="{{ $hexColor ? 'background-color: ' . $hexColor . ';' : 'background-color: #71717a;' }}"

@@ -13,6 +13,7 @@ new #[Title('Nueva Serie')] class extends Component {
     public ?int $tipo_documento_id = null;
     public string $serie = '';
     public int $correlativo = 0;
+    public string $tipo_origen = 'pos'; // 'pos', 'web', 'todos'
     public bool $activo = true;
 
     #[Computed]
@@ -38,6 +39,7 @@ new #[Title('Nueva Serie')] class extends Component {
             'tipo_documento_id' => 'required|exists:tipo_documentos,id',
             'serie' => 'required|string|max:10',
             'correlativo' => 'required|integer|min:0',
+            'tipo_origen' => 'required|in:pos,web,todos',
             'activo' => 'boolean',
         ]);
 
@@ -46,6 +48,7 @@ new #[Title('Nueva Serie')] class extends Component {
             'tipo_documento_id' => $this->tipo_documento_id,
             'serie' => $this->serie,
             'correlativo' => $this->correlativo,
+            'tipo_origen' => $this->tipo_origen,
             'activo' => $this->activo,
         ]);
 
@@ -89,14 +92,26 @@ new #[Title('Nueva Serie')] class extends Component {
                 <flux:error name="tipo_documento_id" />
             </flux:field>
 
-            <flux:field>
-                <flux:label>{{ __('Serie') }}</flux:label>
-                <flux:input wire:model="serie" placeholder="Ej. F001, B001..." required />
-                <flux:error name="serie" />
-            </flux:field>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <flux:field>
+                    <flux:label>{{ __('Serie') }}</flux:label>
+                    <flux:input wire:model="serie" placeholder="Ej. F001, B001, EB01..." required />
+                    <flux:error name="serie" />
+                </flux:field>
+
+                <flux:field>
+                    <flux:label>{{ __('Uso / Canal de Origen') }}</flux:label>
+                    <flux:select wire:model="tipo_origen">
+                        <option value="pos">{{ __('Punto de Venta Físico (POS)') }}</option>
+                        <option value="web">{{ __('Tienda Online (E-commerce)') }}</option>
+                        <option value="todos">{{ __('Global (Todos los canales)') }}</option>
+                    </flux:select>
+                    <flux:error name="tipo_origen" />
+                </flux:field>
+            </div>
 
             <flux:field>
-                <flux:label>{{ __('Correlativo') }}</flux:label>
+                <flux:label>{{ __('Correlativo Inicial') }}</flux:label>
                 <flux:input type="number" wire:model="correlativo" min="0" required />
                 <flux:error name="correlativo" />
             </flux:field>

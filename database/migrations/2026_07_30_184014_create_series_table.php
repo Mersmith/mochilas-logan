@@ -17,6 +17,7 @@ return new class extends Migration
             $table->foreignId('tipo_documento_id')->constrained()->onDelete('cascade');
             $table->string('serie', 10);
             $table->integer('correlativo')->default(0);
+            $table->string('tipo_origen', 30)->default('pos'); // 'pos', 'web', 'todos'
             $table->boolean('activo')->default(true);
 
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

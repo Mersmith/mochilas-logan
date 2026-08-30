@@ -9,6 +9,7 @@ use Livewire\Component;
 new #[Title('Editar Atributo')] class extends Component {
     public Atributo $atributo;
     public string $nombre = '';
+    public string $tipo_selector = 'texto';
     public bool $activo = true;
     public string $nuevoValor = '';
     public ?string $nuevoColorHex = '#3b82f6';
@@ -17,6 +18,7 @@ new #[Title('Editar Atributo')] class extends Component {
     {
         $this->atributo = $atributo->load('valores');
         $this->nombre = $atributo->nombre;
+        $this->tipo_selector = $atributo->tipo_selector ?? 'texto';
         $this->activo = $atributo->activo;
     }
 
@@ -27,7 +29,7 @@ new #[Title('Editar Atributo')] class extends Component {
             'nuevoColorHex' => 'nullable|string|max:20',
         ]);
 
-        $esColor = str_contains(strtolower($this->nombre), 'color');
+        $esColor = $this->tipo_selector === 'color_hex';
         
         AtributoValor::updateOrCreate(
             [
@@ -59,11 +61,13 @@ new #[Title('Editar Atributo')] class extends Component {
 
         $this->validate([
             'nombre' => 'required|string|max:255|unique:atributos,nombre,' . $this->atributo->id,
+            'tipo_selector' => 'required|in:texto,color_hex',
             'activo' => 'boolean',
         ]);
 
         $this->atributo->update([
             'nombre' => $this->nombre,
+            'tipo_selector' => $this->tipo_selector,
             'activo' => $this->activo,
         ]);
 
@@ -76,7 +80,7 @@ new #[Title('Editar Atributo')] class extends Component {
     <div class="flex items-center justify-between">
         <div>
             <flux:heading size="xl">{{ __('Editar Atributo') }}</flux:heading>
-            <flux:subheading>{{ __('Modifica los datos del atributo y sus valores.') }}</flux:subheading>
+            <flux:subheading>{{ __('Modifica el tipo de visualización (Texto o Color) y gestiona sus valores.') }}</flux:subheading>
         </div>
         <flux:button variant="ghost" icon="arrow-left" href="{{ route('admin.atributos.index') }}" wire:navigate>
             {{ __('Volver') }}
@@ -84,22 +88,33 @@ new #[Title('Editar Atributo')] class extends Component {
     </div>
 
     <form wire:submit.prevent="guardar" class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 shadow-sm space-y-6">
-        <flux:field>
-            <flux:label>{{ __('Nombre') }}</flux:label>
-            <flux:input wire:model="nombre" placeholder="Ej. Talla, Color..." required />
-            <flux:error name="nombre" />
-        </flux:field>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <flux:field>
+                <flux:label>{{ __('Nombre del Atributo') }}</flux:label>
+                <flux:input wire:model="nombre" placeholder="Ej. Talla, Color..." required />
+                <flux:error name="nombre" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>{{ __('Tipo de Visualización') }}</flux:label>
+                <flux:select wire:model.live="tipo_selector">
+                    <option value="texto">{{ __('Botones de Texto (Ej. S, M, L, 20L, Cuero)') }}</option>
+                    <option value="color_hex">{{ __('Selector de Color Hexadecimal (Círculos de color)') }}</option>
+                </flux:select>
+                <flux:error name="tipo_selector" />
+            </flux:field>
+        </div>
 
         <flux:field>
             <flux:label>{{ __('Valores del atributo') }}</flux:label>
             <div class="flex items-center gap-2 mt-1">
-                @if(str_contains(strtolower($nombre), 'color'))
+                @if($tipo_selector === 'color_hex')
                     <div class="flex items-center gap-2 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1.5 bg-zinc-50 dark:bg-zinc-800 shrink-0">
                         <input type="color" wire:model.live="nuevoColorHex" class="w-7 h-7 rounded-md cursor-pointer border-0 p-0 bg-transparent" title="Elegir color" />
                         <span class="text-xs font-mono text-zinc-500 uppercase">{{ $nuevoColorHex }}</span>
                     </div>
                 @endif
-                <flux:input wire:model="nuevoValor" placeholder="{{ str_contains(strtolower($nombre), 'color') ? 'Nombre del color (Ej. Rojo Carmín, Azul Marino...)' : 'Ej. XL, Cuero...' }}" class="flex-1" wire:keydown.enter.prevent="agregarValor" />
+                <flux:input wire:model="nuevoValor" placeholder="{{ $tipo_selector === 'color_hex' ? 'Nombre del color (Ej. Rojo Carmín, Azul Marino...)' : 'Ej. XL, 30 Litros, Lona...' }}" class="flex-1" wire:keydown.enter.prevent="agregarValor" />
                 <flux:button wire:click.prevent="agregarValor" icon="plus">{{ __('Agregar') }}</flux:button>
             </div>
             <flux:error name="nuevoValor" />

@@ -43,6 +43,9 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
      */
     public function mount(): void
     {
+        $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
+        $this->telefonoWhatsappTienda = $empresa->whatsapp_pedidos ?? '51916647675';
+
         $items = \App\Services\CartService::getValidatedItems();
         if (empty($items)) {
             $this->redirect(route('carrito'), navigate: true);
@@ -70,8 +73,10 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         $cliente = $user?->cliente;
         $items = $this->items;
         $tot = $this->resumen;
+        $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
+        $whatsappTienda = preg_replace('/[^0-9]/', '', $empresa->whatsapp_pedidos ?? '51916647675');
 
-        $msg = "🎒 *¡HOLA MOCHILAS LOGAN! Deseo realizar un nuevo pedido:*\n\n";
+        $msg = "🎒 *¡HOLA " . strtoupper($empresa->nombre_comercial ?? 'MOCHILAS LOGAN') . "! Deseo realizar un nuevo pedido:*\n\n";
 
         if ($user) {
             $msg .= "👤 *Cliente:* " . $user->name . "\n";
@@ -99,7 +104,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
             $sede = Sede::find($this->sedeRecojo);
             $msg .= "Retiro en tienda (" . ($sede?->nombre ?? 'Sede Principal') . " - " . ($sede?->direccion ?? '') . ")\n";
         } else {
-            $msg .= "Envío a Domicilio (+S/ 9.90)\n";
+            $msg .= "Envío a Domicilio (+S/ " . number_format($tot['costo_envio'], 2) . ")\n";
             $msg .= "📍 *Dirección:* " . ($this->direccionEnvio ?: 'Por coordinar') . "\n";
         }
 
@@ -124,7 +129,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         $msg .= "\n💰 *TOTAL A PAGAR:* S/ " . number_format($tot['total'], 2) . "\n";
         $msg .= "\n_Quedo a la espera de la confirmación de mi pedido. ¡Gracias!_";
 
-        return 'https://api.whatsapp.com/send?phone=' . $this->telefonoWhatsappTienda . '&text=' . urlencode($msg);
+        return 'https://api.whatsapp.com/send?phone=' . $whatsappTienda . '&text=' . urlencode($msg);
     }
 
     /**
@@ -145,7 +150,11 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         $items = $this->items;
         $totalItems = array_sum(array_column($items, 'cantidad'));
         $subtotalFinal = array_sum(array_column($items, 'subtotal'));
-        $costoEnvio = ($this->tipoEntrega === 'envio') ? 9.90 : 0.00;
+        
+        $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
+        $costoEnvioConfig = (float) ($empresa->costo_envio_fijo ?? 9.90);
+        $costoEnvio = ($this->tipoEntrega === 'envio') ? $costoEnvioConfig : 0.00;
+        
         $total = max(0, round($subtotalFinal - $this->couponDiscountAmount + $costoEnvio, 2));
 
         return [
@@ -260,17 +269,24 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
 
         DB::transaction(function () use ($items) {
             $tot = $this->resumen;
+            $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
 
-            // Get default document type (Boleta de Venta)
-            $tipoDoc = TipoDocumento::where('codigo_sunat', '03')->first();
+            // Get default document type (Boleta de Venta o Configuración Web)
+            $tipoDoc = $empresa->tipoDocumentoWeb 
+                ?? TipoDocumento::where('codigo_sunat', '03')->first() 
+                ?? TipoDocumento::firstOrCreate(
+                    ['codigo_sunat' => '03'],
+                    ['nombre' => 'Boleta de Venta', 'descripcion' => 'Boleta de Venta Electrónica', 'activo' => true]
+                );
 
-            // Get serie and correlativo
-            $almacen = Almacen::where('activo', true)->first();
+            // Get serie and correlativo (preferencia serie web)
             $serieRecord = DB::table('series')
                 ->where('tipo_documento_id', $tipoDoc->id)
-                ->first();
+                ->whereIn('tipo_origen', ['web', 'todos'])
+                ->first()
+                ?? DB::table('series')->where('tipo_documento_id', $tipoDoc->id)->first();
 
-            $serie = $serieRecord ? $serieRecord->serie : 'B001';
+            $serie = $serieRecord ? $serieRecord->serie : 'EB01';
             $correlativo = $serieRecord ? $serieRecord->correlativo : 1;
 
             // Build delivery notes
@@ -407,7 +423,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                                 <div
                                     class="text-sm font-bold {{ $tipoEntrega === 'envio' ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400' }}">
                                     {{ __('Envío a Domicilio') }}</div>
-                                <div class="text-xxs text-zinc-500 font-semibold">S/ 9.90</div>
+                                <div class="text-xxs text-zinc-500 font-semibold">S/ {{ number_format(\App\Models\EmpresaConfiguracion::getEmpresa()->costo_envio_fijo ?? 9.90, 2) }}</div>
                             </div>
                         </div>
                     </button>

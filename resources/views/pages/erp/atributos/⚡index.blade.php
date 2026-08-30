@@ -220,6 +220,7 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold bg-zinc-50 dark:bg-zinc-800/40">
                         <th class="p-3">{{ __('Nombre') }}</th>
+                        <th class="p-3 text-center">{{ __('Tipo Visual') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
                         <th class="p-3 text-center">{{ __('Creado') }}</th>
                         <th class="p-3 text-center">{{ __('Registro') }}</th>
@@ -233,6 +234,19 @@ new #[Title('Mantenimiento de Atributos')] class extends Component {
                         <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors {{ $atributo->trashed() ? 'opacity-50' : '' }}">
                             <td class="p-3 font-medium text-zinc-900 dark:text-white">
                                 {{ $atributo->nombre }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($atributo->tipo_selector === 'color_hex')
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                        <flux:icon name="swatch" class="size-3.5" />
+                                        {{ __('Color Hex') }}
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                        <flux:icon name="chat-bubble-bottom-center-text" class="size-3.5" />
+                                        {{ __('Texto') }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="p-3 text-center">
                                 @if($atributo->activo)

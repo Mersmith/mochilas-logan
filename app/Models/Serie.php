@@ -16,6 +16,7 @@ class Serie extends Model
         'tipo_documento_id',
         'serie',
         'correlativo',
+        'tipo_origen',
         'activo',
         'created_by',
         'updated_by',

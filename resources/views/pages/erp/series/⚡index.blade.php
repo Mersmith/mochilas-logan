@@ -255,6 +255,7 @@ new #[Title('Gestión de Series')] class extends Component {
                         <th class="p-3">{{ __('Sede') }}</th>
                         <th class="p-3">{{ __('Tipo de Documento') }}</th>
                         <th class="p-3">{{ __('Serie') }}</th>
+                        <th class="p-3 text-center">{{ __('Canal / Origen') }}</th>
                         <th class="p-3 text-center">{{ __('Correlativo') }}</th>
                         <th class="p-3 text-center">{{ __('Estado') }}</th>
                         <th class="p-3 text-center">{{ __('Creado') }}</th>
@@ -273,8 +274,26 @@ new #[Title('Gestión de Series')] class extends Component {
                             <td class="p-3 font-medium text-zinc-900 dark:text-white">
                                 {{ $serie->tipoDocumento->nombre ?? '-' }}
                             </td>
-                            <td class="p-3 font-medium text-zinc-900 dark:text-white">
+                            <td class="p-3 font-mono font-bold text-zinc-900 dark:text-white">
                                 {{ $serie->serie }}
+                            </td>
+                            <td class="p-3 text-center">
+                                @if($serie->tipo_origen === 'web')
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                        <flux:icon name="globe-alt" class="size-3" />
+                                        {{ __('Web') }}
+                                    </span>
+                                @elseif($serie->tipo_origen === 'todos')
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                        <flux:icon name="sparkles" class="size-3" />
+                                        {{ __('Global') }}
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                        <flux:icon name="building-storefront" class="size-3" />
+                                        {{ __('POS Físico') }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="p-3 text-center text-zinc-600 dark:text-zinc-400 font-mono">
                                 {{ str_pad($serie->correlativo, 8, '0', STR_PAD_LEFT) }}

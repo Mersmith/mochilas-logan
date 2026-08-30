@@ -116,8 +116,12 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->middleware('can:promociones.editar');
 
         // =============================================
-        // MANTENIMIENTO: Organización
+        // MANTENIMIENTO: Organización y Empresa
         // =============================================
+
+        Route::livewire('empresa', 'pages::erp.empresa.index')
+            ->name('empresa.index')
+            ->middleware('can:panel.acceder');
 
         Route::livewire('sedes', 'pages::erp.sedes.index')
             ->name('sedes.index')

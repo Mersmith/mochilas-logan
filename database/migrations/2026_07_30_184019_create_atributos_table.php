@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('atributos', function (Blueprint $table) {
             $table->id();
             $table->string('nombre')->unique();
+            $table->string('tipo_selector', 30)->default('texto'); // 'texto', 'color_hex'
             $table->boolean('activo')->default(true);
 
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
