@@ -60,4 +60,14 @@ class Sede extends Model
     {
         return $this->hasMany(Serie::class);
     }
+
+    /**
+     * Get the physical cash registers for this Sede.
+     *
+     * @return HasMany<Caja, $this>
+     */
+    public function cajas(): HasMany
+    {
+        return $this->hasMany(Caja::class);
+    }
 }

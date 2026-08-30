@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Producto;
+use App\Models\Venta;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -82,6 +83,16 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
         Route::livewire('ventas/nueva', 'pages::erp.ventas.create')
             ->name('ventas.create')
             ->middleware('can:ventas.crear');
+        Route::get('ventas/{venta}/ticket', function (Venta $venta) {
+            $venta->load(['user.cliente', 'tipoDocumento', 'detalles.variacion.producto', 'detalles.variacion.valores.atributo', 'detalles.unidadMedida', 'movimientosKardex.almacen.sede']);
+
+            return view('pages.erp.ventas.ticket-print', compact('venta'));
+        })->name('ventas.ticket')->middleware('can:ventas.ver');
+
+        // Control de Cajas y Turnos
+        Route::livewire('cajas', 'pages::erp.cajas.index')
+            ->name('cajas.index')
+            ->middleware('can:cajas.ver');
 
         // Descuentos y Cupones (supervisor, admin)
         Route::livewire('descuentos', 'pages::erp.descuentos.index')

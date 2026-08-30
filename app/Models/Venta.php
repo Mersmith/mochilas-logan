@@ -14,6 +14,7 @@ class Venta extends Model
 
     protected $fillable = [
         'user_id',
+        'caja_sesion_id',
         'tipo_documento_id',
         'serie',
         'correlativo',
@@ -103,5 +104,15 @@ class Venta extends Model
     public function movimientosKardex(): MorphMany
     {
         return $this->morphMany(Kardex::class, 'origen_documento');
+    }
+
+    /**
+     * Sesión de caja en la que se cobró esta venta.
+     *
+     * @return BelongsTo<CajaSesion, $this>
+     */
+    public function cajaSesion(): BelongsTo
+    {
+        return $this->belongsTo(CajaSesion::class, 'caja_sesion_id');
     }
 }

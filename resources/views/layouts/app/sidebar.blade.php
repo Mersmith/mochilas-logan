@@ -213,6 +213,14 @@
                         {{ __('Ventas / POS') }}
                     </flux:sidebar.item>
                 @endcan
+
+                @can('cajas.ver')
+                    <flux:sidebar.item icon="banknotes" :href="route('admin.cajas.index')"
+                        :current="request()->routeIs('admin.cajas.*')"
+                        wire:navigate>
+                        {{ __('Control de Cajas') }}
+                    </flux:sidebar.item>
+                @endcan
             </flux:sidebar.group>
         </flux:sidebar.group>
 

@@ -435,6 +435,7 @@ new #[Title('Historial de Ventas')] class extends Component {
                                 @endif
                             </td>
                             <td class="p-4 text-right space-x-1">
+                                <flux:button variant="ghost" icon="printer" size="sm" :href="route('admin.ventas.ticket', $venta->id)" target="_blank" title="{{ __('Ticket Térmico (80mm)') }}" />
                                 <flux:button variant="ghost" icon="eye" size="sm" wire:click.prevent="verDetalle({{ $venta->id }})" title="{{ __('Ver Recibo') }}" />
                                 @if($venta->estado_pago === 'pagado')
                                     <flux:button variant="ghost" icon="arrow-uturn-left" size="sm" class="text-rose-600 hover:text-rose-700" wire:click.prevent="abrirModalAnulacion({{ $venta->id }})" title="{{ __('Nota de Crédito / Devolución / Anulación') }}" />
@@ -479,6 +480,9 @@ new #[Title('Historial de Ventas')] class extends Component {
                             <flux:subheading>{{ $this->selectedVenta->serie }}-{{ str_pad($this->selectedVenta->correlativo, 6, '0', STR_PAD_LEFT) }}</flux:subheading>
                         </div>
                         <div class="flex items-center gap-2">
+                            <flux:button size="sm" variant="ghost" icon="printer" :href="route('admin.ventas.ticket', $this->selectedVenta->id)" target="_blank">
+                                {{ __('Ticket 80mm') }}
+                            </flux:button>
                             <flux:button size="sm" variant="primary" icon="arrow-down-tray" wire:click="descargarPdf({{ $this->selectedVenta->id }})" wire:loading.attr="disabled" wire:target="descargarPdf">
                                 <span wire:loading.remove wire:target="descargarPdf">{{ __('Descargar PDF') }}</span>
                                 <span wire:loading wire:target="descargarPdf">{{ __('Generando...') }}</span>

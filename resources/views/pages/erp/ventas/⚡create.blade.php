@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Almacen;
+use App\Models\CajaSesion;
 use App\Models\Cliente;
 use App\Models\Cupon;
 use App\Models\Inventario;
@@ -36,6 +37,9 @@ new #[Title('Registrar Venta')] class extends Component {
     public string $metodo_pago = 'efectivo';
     public string $nota = '';
 
+    // Pistoleo / Escáner de Código de Barras
+    public string $barcode = '';
+
     // Carrito de Compra
     public array $cart = [];
 
@@ -47,6 +51,16 @@ new #[Title('Registrar Venta')] class extends Component {
     public ?int $appliedCouponId = null;
     public float $couponDiscountAmount = 0.00;
 
+    // Modalidad de Pago y Calculadora de Vuelto
+    public string $modalidad_pago = 'simple'; // 'simple' | 'mixto'
+    public float $monto_efectivo_recibido = 0.00;
+
+    // Pago Mixto / Fraccionado
+    public float $monto_pago_efectivo = 0.00;
+    public float $monto_pago_yape_plin = 0.00;
+    public float $monto_pago_tarjeta = 0.00;
+    public float $monto_pago_transferencia = 0.00;
+
     // Modal Rápido de Cliente
     public string $modal_tipo_persona = 'natural';
     public string $modal_tipo_cliente = 'minorista';
@@ -56,6 +70,13 @@ new #[Title('Registrar Venta')] class extends Component {
     public ?string $modal_email = '';
     public ?string $modal_telefono = '';
     public ?int $modal_lista_precio_id = null;
+
+    // Modal de Venta Exitosa
+    public bool $showSuccessModal = false;
+    public ?int $completedVentaId = null;
+    public string $completedComprobante = '';
+    public float $completedTotal = 0.00;
+    public float $completedVuelto = 0.00;
 
     /**
      * Mount the component.
@@ -156,6 +177,51 @@ new #[Title('Registrar Venta')] class extends Component {
             $item['subtotal'] = round($item['cantidad'] * $item['precio_unitario'], 2);
             $item['total'] = $item['subtotal'];
         }
+    }
+
+    /**
+     * Escaneo de Código de Barras / SKU con lectora láser.
+     */
+    public function scanBarcode(): void
+    {
+        $code = trim($this->barcode);
+        if (empty($code)) {
+            return;
+        }
+
+        if (! $this->almacen_id) {
+            Flux::toast(variant: 'danger', text: __('Debe seleccionar un almacén origen primero.'));
+            $this->barcode = '';
+            return;
+        }
+
+        $var = Variacion::with(['producto', 'valores.atributo', 'precios.listaPrecio'])
+            ->where('activo', true)
+            ->where(function ($q) use ($code) {
+                $q->where('sku', $code)
+                    ->orWhere('codigo_barras', $code)
+                    ->orWhereHas('producto', fn ($p) => $p->where('sku', $code));
+            })
+            ->first();
+
+        if (! $var) {
+            Flux::toast(variant: 'warning', text: __("No se encontró ningún producto con el código ':code'.", ['code' => $code]));
+            $this->barcode = '';
+            return;
+        }
+
+        // Si ya está en el carrito, incrementar cantidad
+        $cartIndex = collect($this->cart)->search(fn ($item) => $item['variacion_id'] === $var->id);
+
+        if ($cartIndex !== false) {
+            $this->cart[$cartIndex]['cantidad']++;
+            $this->updatedCart($this->cart[$cartIndex]['cantidad'], "cart.{$cartIndex}.cantidad");
+            Flux::toast(variant: 'success', text: __('Cantidad +1: ') . $var->producto->nombre);
+        } else {
+            $this->addToCart($var->id);
+        }
+
+        $this->barcode = '';
     }
 
     /**
@@ -305,6 +371,21 @@ new #[Title('Registrar Venta')] class extends Component {
     }
 
     /**
+     * Calculadora de Vuelto: Botones rápidos de billetes.
+     */
+    public function establecerMontoRecibido(float $monto): void
+    {
+        $this->monto_efectivo_recibido = $monto;
+    }
+
+    public function pagarMontoExacto(): void
+    {
+        $subtotal = collect($this->cart)->sum('total');
+        $total = max(0, $subtotal - $this->couponDiscountAmount);
+        $this->monto_efectivo_recibido = $total;
+    }
+
+    /**
      * Apply coupon discount.
      */
     public function aplicarCupon(): void
@@ -442,8 +523,6 @@ new #[Title('Registrar Venta')] class extends Component {
             'serie' => 'required|string|max:10',
             'correlativo' => 'required|integer|min:1',
             'fecha_venta' => 'required|date',
-            'tipo_pago' => 'required|in:online,contraentrega',
-            'metodo_pago' => 'required|in:efectivo,tarjeta,transferencia,yape_plin',
             'cart' => 'required|array|min:1',
         ], [
             'cart.min' => __('Debe agregar al menos un producto al carrito para registrar la venta.'),
@@ -453,10 +532,34 @@ new #[Title('Registrar Venta')] class extends Component {
         $descuento = $this->couponDiscountAmount;
         $total = max(0, $subtotal - $descuento);
 
-        DB::transaction(function () use ($subtotal, $descuento, $total) {
+        // Validación para Pago Mixto
+        if ($this->modalidad_pago === 'mixto') {
+            $sumaMixta = (float) ($this->monto_pago_efectivo + $this->monto_pago_yape_plin + $this->monto_pago_tarjeta + $this->monto_pago_transferencia);
+            if (abs($sumaMixta - $total) > 0.05) {
+                Flux::toast(variant: 'danger', text: __('En Pago Mixto, la suma de los montos (S/ ' . number_format($sumaMixta, 2) . ') debe ser igual al Total (S/ ' . number_format($total, 2) . ').'));
+                return;
+            }
+        }
+
+        $sesionActiva = $this->sesionActiva;
+        $comentariosFinal = $this->nota;
+
+        if ($this->modalidad_pago === 'mixto') {
+            $desgloseTexto = "[PAGO MIXTO]: Efectivo S/ " . number_format($this->monto_pago_efectivo, 2) .
+                " | Yape/Plin S/ " . number_format($this->monto_pago_yape_plin, 2) .
+                " | Tarjeta S/ " . number_format($this->monto_pago_tarjeta, 2) .
+                " | Transferencia S/ " . number_format($this->monto_pago_transferencia, 2);
+            $comentariosFinal = trim($comentariosFinal . "\n" . $desgloseTexto);
+        } elseif ($this->metodo_pago === 'efectivo' && $this->monto_efectivo_recibido > $total) {
+            $vueltoCalc = $this->monto_efectivo_recibido - $total;
+            $comentariosFinal = trim($comentariosFinal . "\n[PAGO EFECTIVO]: Pagó con S/ " . number_format($this->monto_efectivo_recibido, 2) . " | Vuelto: S/ " . number_format($vueltoCalc, 2));
+        }
+
+        $ventaCreada = DB::transaction(function () use ($subtotal, $descuento, $total, $sesionActiva, $comentariosFinal) {
             // Crear la Venta
             $venta = Venta::create([
                 'user_id' => $this->cliente_id,
+                'caja_sesion_id' => $sesionActiva?->id,
                 'tipo_documento_id' => $this->tipo_documento_id,
                 'serie' => $this->serie,
                 'correlativo' => $this->correlativo,
@@ -467,9 +570,9 @@ new #[Title('Registrar Venta')] class extends Component {
                 'costo_envio' => 0.00,
                 'total' => $total,
                 'tipo_pago' => $this->tipo_pago,
-                'metodo_pago' => $this->metodo_pago,
+                'metodo_pago' => $this->modalidad_pago === 'mixto' ? 'mixto' : $this->metodo_pago,
                 'cupon_id' => $this->appliedCouponId,
-                'comentarios' => $this->nota,
+                'comentarios' => $comentariosFinal,
             ]);
 
             // Reducir usos restantes del cupón
@@ -533,10 +636,46 @@ new #[Title('Registrar Venta')] class extends Component {
                     $serieModel->update(['correlativo' => $this->correlativo + 1]);
                 }
             }
+
+            // Actualizar totales en la sesión de caja
+            if ($sesionActiva) {
+                if ($this->modalidad_pago === 'mixto') {
+                    $sesionActiva->total_ventas_efectivo += $this->monto_pago_efectivo;
+                    $sesionActiva->total_ventas_yape_plin += $this->monto_pago_yape_plin;
+                    $sesionActiva->total_ventas_tarjeta += $this->monto_pago_tarjeta;
+                    $sesionActiva->total_ventas_transferencia += $this->monto_pago_transferencia;
+                    $sesionActiva->monto_cierre_esperado = round((float) $sesionActiva->monto_inicial + (float) $sesionActiva->total_ventas_efectivo + (float) $sesionActiva->total_ingresos_extra - (float) $sesionActiva->total_egresos_gastos, 2);
+                    $sesionActiva->save();
+                } else {
+                    $sesionActiva->recalcularTotales();
+                }
+            }
+
+            return $venta;
         });
 
-        Flux::toast(variant: 'success', text: __('Venta registrada y stock descontado del almacén.'));
-        $this->redirect(route('admin.ventas.index'), navigate: true);
+        // Configurar modal de éxito con vuelto
+        $this->completedVentaId = $ventaCreada->id;
+        $this->completedComprobante = $ventaCreada->tipoDocumento->nombre . ' ' . $ventaCreada->serie . '-' . str_pad($ventaCreada->correlativo, 6, '0', STR_PAD_LEFT);
+        $this->completedTotal = $total;
+        $this->completedVuelto = ($this->metodo_pago === 'efectivo' && $this->monto_efectivo_recibido > $total) ? round($this->monto_efectivo_recibido - $total, 2) : 0.00;
+        $this->showSuccessModal = true;
+
+        Flux::toast(variant: 'success', text: __('Venta completada con éxito.'));
+    }
+
+    public function reiniciarVenta(): void
+    {
+        $this->cart = [];
+        $this->cancelarCupon();
+        $this->monto_efectivo_recibido = 0.00;
+        $this->monto_pago_efectivo = 0.00;
+        $this->monto_pago_yape_plin = 0.00;
+        $this->monto_pago_tarjeta = 0.00;
+        $this->monto_pago_transferencia = 0.00;
+        $this->nota = '';
+        $this->showSuccessModal = false;
+        $this->actualizarSeries();
     }
 
     #[Computed]
@@ -596,12 +735,66 @@ new #[Title('Registrar Venta')] class extends Component {
             ->where('activo', true)
             ->get();
     }
+
+    #[Computed]
+    public function sesionActiva()
+    {
+        if (! $this->sede_id) {
+            return null;
+        }
+
+        return CajaSesion::with(['caja', 'user'])
+            ->whereHas('caja', fn ($q) => $q->where('sede_id', $this->sede_id))
+            ->where('estado', 'abierta')
+            ->first();
+    }
 }; ?>
 
 <div class="space-y-6">
-    <div>
-        <flux:heading size="xl">{{ __('Registrar Nueva Venta (POS)') }}</flux:heading>
-        <flux:subheading>{{ __('Selecciona la Sede, la Tarifa de precios y el Cliente para cotizar y facturar.') }}</flux:subheading>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <flux:heading size="xl">{{ __('Registrar Nueva Venta (POS)') }}</flux:heading>
+            <flux:subheading>{{ __('Pistoleo de códigos de barra, calculadora de vuelto y cobro rápido.') }}</flux:subheading>
+        </div>
+
+        @if($this->sesionActiva)
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs">
+                <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-semibold text-emerald-800 dark:text-emerald-300">
+                    {{ __('Turno Activo: ') }}{{ $this->sesionActiva->caja->nombre }} ({{ $this->sesionActiva->user->name }})
+                </span>
+            </div>
+        @else
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
+                <flux:icon.exclamation-triangle class="size-4 text-amber-600" />
+                <span>{{ __('Sin caja abierta en esta sede.') }}</span>
+                <a href="{{ route('admin.cajas.index') }}" class="underline font-bold hover:text-amber-900 dark:hover:text-amber-100" wire:navigate>{{ __('Abrir Caja') }}</a>
+            </div>
+        @endif
+    </div>
+
+    <!-- Barra de Pistoleo / Escáner de Código de Barras -->
+    <div class="bg-zinc-900 text-white rounded-xl p-4 shadow-md flex flex-col sm:flex-row items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-zinc-800 rounded-lg text-emerald-400">
+                <flux:icon.qr-code class="size-6" />
+            </div>
+            <div>
+                <div class="text-xs font-bold uppercase tracking-wider text-zinc-400">{{ __('Lector de Código de Barras / SKU') }}</div>
+                <div class="text-xxs text-zinc-400">{{ __('Escanea con la pistola láser o digita el SKU y presiona Enter.') }}</div>
+            </div>
+        </div>
+
+        <div class="flex-1 w-full">
+            <input 
+                type="text" 
+                wire:model="barcode" 
+                wire:keydown.enter.prevent="scanBarcode"
+                placeholder="{{ __('Escanear código de barras o SKU...') }}" 
+                class="w-full bg-zinc-800 border-2 border-emerald-500/60 focus:border-emerald-400 text-white rounded-lg px-4 py-2 text-sm font-mono tracking-wider focus:outline-none placeholder-zinc-500 shadow-inner"
+                autofocus
+            />
+        </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -650,7 +843,7 @@ new #[Title('Registrar Venta')] class extends Component {
             </div>
         </div>
 
-        <!-- Panel Derecho: Carrito de Compras y Detalles del Comprobante -->
+        <!-- Panel Derecho: Carrito de Compras y Cobro POS -->
         <div class="lg:col-span-2 space-y-6">
             <form wire:submit.prevent="guardar" class="space-y-6">
                 <!-- Tarjeta Datos de Facturación -->
@@ -710,29 +903,6 @@ new #[Title('Registrar Venta')] class extends Component {
                             <flux:error name="cliente_id" />
                         </div>
 
-                        <!-- Tipo y Método de Pago -->
-                        <flux:field>
-                            <flux:label>{{ __('Tipo de Pago') }}</flux:label>
-                            <flux:select wire:model="tipo_pago">
-                                <option value="online">{{ __('Online') }}</option>
-                                <option value="contraentrega">{{ __('Contraentrega') }}</option>
-                            </flux:select>
-                            <flux:error name="tipo_pago" />
-                        </flux:field>
-
-                        <flux:field>
-                            <flux:label>{{ __('Método de Pago') }}</flux:label>
-                            <flux:select wire:model="metodo_pago">
-                                <option value="efectivo">{{ __('Efectivo') }}</option>
-                                <option value="tarjeta">{{ __('Tarjeta de Crédito/Débito') }}</option>
-                                <option value="transferencia">{{ __('Transferencia Bancaria') }}</option>
-                                <option value="yape_plin">{{ __('Yape / Plin') }}</option>
-                            </flux:select>
-                            <flux:error name="metodo_pago" />
-                        </flux:field>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <!-- Comprobante -->
                         <flux:field>
                             <flux:label>{{ __('Comprobante') }}</flux:label>
@@ -745,7 +915,7 @@ new #[Title('Registrar Venta')] class extends Component {
                             <flux:error name="tipo_documento_id" />
                         </flux:field>
 
-                        <div class="grid grid-cols-2 gap-4 md:col-span-2">
+                        <div class="grid grid-cols-2 gap-4">
                             <!-- Serie -->
                             <flux:field>
                                 <flux:label>{{ __('Serie') }}</flux:label>
@@ -760,14 +930,6 @@ new #[Title('Registrar Venta')] class extends Component {
                                 <flux:error name="correlativo" />
                             </flux:field>
                         </div>
-
-                        @if(empty($serie) && $sede_id && $tipo_documento_id)
-                            <div class="md:col-span-3 -mt-3">
-                                <span class="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                                    ⚠️ {{ __('La sede seleccionada no tiene una serie activa registrada para este tipo de comprobante.') }}
-                                </span>
-                            </div>
-                        @endif
                     </div>
                 </div>
 
@@ -778,7 +940,7 @@ new #[Title('Registrar Venta')] class extends Component {
                     @if(empty($cart))
                         <div class="text-center py-12 text-zinc-500 text-sm">
                             <flux:icon.shopping-cart class="size-8 mx-auto mb-2 text-zinc-400" />
-                            {{ __('El carrito de compras está vacío. Agrega productos desde el catálogo.') }}
+                            {{ __('El carrito de compras está vacío. Pistolea un código de barras o agrega productos desde el catálogo.') }}
                         </div>
                     @else
                         <div class="overflow-x-auto">
@@ -820,7 +982,7 @@ new #[Title('Registrar Venta')] class extends Component {
                                             </td>
 
                                             <td class="py-3 pr-2 w-20">
-                                                <input type="number" min="1" wire:model.live.debounce.300ms="cart.{{ $index }}.cantidad" class="w-16 text-xs py-1 px-2 border rounded-md dark:bg-zinc-800 dark:border-zinc-700 text-center" />
+                                                <input type="number" min="1" wire:model.live.debounce.300ms="cart.{{ $index }}.cantidad" class="w-16 text-xs py-1 px-2 border rounded-md dark:bg-zinc-800 dark:border-zinc-700 text-center font-bold" />
                                             </td>
 
                                             <td class="py-3 pr-2 text-zinc-500 font-medium">
@@ -846,37 +1008,167 @@ new #[Title('Registrar Venta')] class extends Component {
                     @endif
                 </div>
 
-                <!-- Tarjeta Resumen y Cupones -->
+                <!-- Tarjeta Métodos de Pago, Calculadora de Vuelto y Totales -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Cupones y Notas -->
-                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm h-fit">
-                        <flux:heading size="lg">{{ __('Cupón de Descuento') }}</flux:heading>
-
-                        <div class="flex gap-2">
-                            <flux:input wire:model="couponCode" placeholder="Ej. VERANO2026" class="uppercase" />
-                            @if($appliedCouponId)
-                                <flux:button variant="danger" wire:click.prevent="cancelarCupon">{{ __('Quitar') }}</flux:button>
-                            @else
-                                <flux:button variant="primary" wire:click.prevent="aplicarCupon">{{ __('Aplicar') }}</flux:button>
-                            @endif
+                    
+                    <!-- Sección Izquierda: Modalidad de Pago y Calculadora de Vuelto -->
+                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-5 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <flux:heading size="lg">{{ __('Forma de Pago') }}</flux:heading>
+                            <div class="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg text-xs">
+                                <button type="button" wire:click="$set('modalidad_pago', 'simple')" class="px-3 py-1 rounded-md font-medium transition {{ $modalidad_pago === 'simple' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500' }}">
+                                    {{ __('Pago Simple') }}
+                                </button>
+                                <button type="button" wire:click="$set('modalidad_pago', 'mixto')" class="px-3 py-1 rounded-md font-medium transition {{ $modalidad_pago === 'mixto' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500' }}">
+                                    {{ __('Pago Mixto') }}
+                                </button>
+                            </div>
                         </div>
-
-                        <flux:field>
-                            <flux:label>{{ __('Nota de Venta / Observación') }}</flux:label>
-                            <flux:textarea wire:model="nota" rows="2" placeholder="Opcional..." />
-                        </flux:field>
-                    </div>
-
-                    <!-- Totales y Acción Final -->
-                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm flex flex-col justify-between">
-                        <flux:heading size="lg">{{ __('Resumen de Totales') }}</flux:heading>
 
                         @php
                             $subtotal = collect($cart)->sum('total');
                             $total = max(0, $subtotal - $couponDiscountAmount);
                         @endphp
 
-                        <div class="space-y-2 border-t border-b border-zinc-200 dark:border-zinc-800 py-3 text-sm">
+                        @if($modalidad_pago === 'simple')
+                            <!-- Método Único -->
+                            <flux:field>
+                                <flux:label>{{ __('Método de Pago') }}</flux:label>
+                                <flux:select wire:model.live="metodo_pago">
+                                    <option value="efectivo">💵 {{ __('Efectivo') }}</option>
+                                    <option value="yape_plin">📱 {{ __('Yape / Plin') }}</option>
+                                    <option value="tarjeta">💳 {{ __('Tarjeta de Débito / Crédito') }}</option>
+                                    <option value="transferencia">🏦 {{ __('Transferencia Bancaria') }}</option>
+                                </flux:select>
+                            </flux:field>
+
+                            <!-- Calculadora de Vuelto para Efectivo -->
+                            @if($metodo_pago === 'efectivo')
+                                <div class="p-4 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl space-y-3">
+                                    <div class="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide">
+                                        {{ __('Calculadora de Vuelto') }}
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-3 items-center">
+                                        <flux:field>
+                                            <flux:label>{{ __('Pagó con (S/)') }}</flux:label>
+                                            <flux:input type="number" step="0.50" min="0" wire:model.live="monto_efectivo_recibido" class="font-bold text-base" />
+                                        </flux:field>
+
+                                        <!-- Vuelto Calculado -->
+                                        @php
+                                            $montoRec = (float) $monto_efectivo_recibido;
+                                            $vuelto = $montoRec >= $total ? round($montoRec - $total, 2) : 0;
+                                            $falta = $montoRec > 0 && $montoRec < $total ? round($total - $montoRec, 2) : 0;
+                                        @endphp
+                                        <div class="p-3 rounded-lg border {{ $montoRec >= $total && $total > 0 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700' : ($falta > 0 ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700' : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700') }} text-center">
+                                            @if($montoRec >= $total && $total > 0)
+                                                <div class="text-xxs uppercase font-bold text-emerald-800 dark:text-emerald-300">{{ __('Vuelto a Entregar') }}</div>
+                                                <div class="text-xl font-black text-emerald-700 dark:text-emerald-300">S/ {{ number_format($vuelto, 2) }}</div>
+                                            @elseif($falta > 0)
+                                                <div class="text-xxs uppercase font-bold text-rose-800 dark:text-rose-300">{{ __('Falta Abonar') }}</div>
+                                                <div class="text-lg font-bold text-rose-700 dark:text-rose-300">- S/ {{ number_format($falta, 2) }}</div>
+                                            @else
+                                                <div class="text-xxs text-zinc-500 uppercase">{{ __('Vuelto') }}</div>
+                                                <div class="text-base font-bold text-zinc-400">S/ 0.00</div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <!-- Botones Rápidos de Billetes -->
+                                    <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                                        <button type="button" wire:click="pagarMontoExacto" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            {{ __('Exacto') }}
+                                        </button>
+                                        <button type="button" wire:click="establecerMontoRecibido(10)" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            S/ 10
+                                        </button>
+                                        <button type="button" wire:click="establecerMontoRecibido(20)" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            S/ 20
+                                        </button>
+                                        <button type="button" wire:click="establecerMontoRecibido(50)" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            S/ 50
+                                        </button>
+                                        <button type="button" wire:click="establecerMontoRecibido(100)" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            S/ 100
+                                        </button>
+                                        <button type="button" wire:click="establecerMontoRecibido(200)" class="px-2.5 py-1 text-xs font-semibold bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-600 transition">
+                                            S/ 200
+                                        </button>
+                                    </div>
+                                </div>
+                            @endif
+                        @else
+                            <!-- Pago Mixto / Fraccionado -->
+                            <div class="space-y-3 p-4 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl">
+                                <div class="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase">
+                                    {{ __('Desglose de Pago Fraccionado') }}
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <flux:field>
+                                        <flux:label class="text-xs">💵 {{ __('Efectivo (S/)') }}</flux:label>
+                                        <flux:input type="number" step="0.50" min="0" wire:model.live="monto_pago_efectivo" />
+                                    </flux:field>
+
+                                    <flux:field>
+                                        <flux:label class="text-xs">📱 {{ __('Yape / Plin (S/)') }}</flux:label>
+                                        <flux:input type="number" step="0.50" min="0" wire:model.live="monto_pago_yape_plin" />
+                                    </flux:field>
+
+                                    <flux:field>
+                                        <flux:label class="text-xs">💳 {{ __('Tarjeta (S/)') }}</flux:label>
+                                        <flux:input type="number" step="0.50" min="0" wire:model.live="monto_pago_tarjeta" />
+                                    </flux:field>
+
+                                    <flux:field>
+                                        <flux:label class="text-xs">🏦 {{ __('Transferencia (S/)') }}</flux:label>
+                                        <flux:input type="number" step="0.50" min="0" wire:model.live="monto_pago_transferencia" />
+                                    </flux:field>
+                                </div>
+
+                                @php
+                                    $sumaMixta = (float) ($monto_pago_efectivo + $monto_pago_yape_plin + $monto_pago_tarjeta + $monto_pago_transferencia);
+                                    $difMixta = round($total - $sumaMixta, 2);
+                                @endphp
+
+                                <div class="p-2.5 rounded-lg border text-xs flex justify-between items-center {{ $difMixta == 0 && $total > 0 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-800 dark:text-emerald-300 font-bold' : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 text-amber-800 dark:text-amber-300' }}">
+                                    <span>{{ __('Suma ingresada: S/ ') . number_format($sumaMixta, 2) }}</span>
+                                    @if($difMixta == 0 && $total > 0)
+                                        <span>✅ {{ __('Cuadrado') }}</span>
+                                    @elseif($difMixta > 0)
+                                        <span>⚠️ {{ __('Faltan: S/ ') . number_format($difMixta, 2) }}</span>
+                                    @else
+                                        <span>🔴 {{ __('Excedente: S/ ') . number_format(abs($difMixta), 2) }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
+                        <!-- Cupones y Notas -->
+                        <div class="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                            <flux:label>{{ __('Cupón de Descuento') }}</flux:label>
+                            <div class="flex gap-2">
+                                <flux:input wire:model="couponCode" placeholder="Ej. VERANO2026" class="uppercase" />
+                                @if($appliedCouponId)
+                                    <flux:button variant="danger" wire:click.prevent="cancelarCupon">{{ __('Quitar') }}</flux:button>
+                                @else
+                                    <flux:button variant="primary" wire:click.prevent="aplicarCupon">{{ __('Aplicar') }}</flux:button>
+                                @endif
+                            </div>
+
+                            <flux:field>
+                                <flux:label>{{ __('Nota de Venta / Observación') }}</flux:label>
+                                <flux:textarea wire:model="nota" rows="2" placeholder="Opcional..." />
+                            </flux:field>
+                        </div>
+                    </div>
+
+                    <!-- Sección Derecha: Resumen de Totales y Cobro Final -->
+                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-6 shadow-sm flex flex-col justify-between">
+                        <flux:heading size="lg">{{ __('Resumen de Totales') }}</flux:heading>
+
+                        <div class="space-y-3 border-t border-b border-zinc-200 dark:border-zinc-800 py-4 text-sm">
                             <div class="flex justify-between text-zinc-600 dark:text-zinc-400">
                                 <span>{{ __('Subtotal') }}</span>
                                 <span class="font-medium text-zinc-900 dark:text-white">S/ {{ number_format($subtotal, 2) }}</span>
@@ -889,15 +1181,15 @@ new #[Title('Registrar Venta')] class extends Component {
                                 </div>
                             @endif
 
-                            <div class="flex justify-between text-base font-bold text-zinc-900 dark:text-white pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                                <span>{{ __('Total a Pagar') }}</span>
-                                <span class="text-xl font-black text-emerald-600">S/ {{ number_format($total, 2) }}</span>
+                            <div class="flex justify-between text-lg font-bold text-zinc-900 dark:text-white pt-3 border-t border-zinc-200 dark:border-zinc-800">
+                                <span>{{ __('Total a Cobrar') }}</span>
+                                <span class="text-2xl font-black text-emerald-600">S/ {{ number_format($total, 2) }}</span>
                             </div>
                         </div>
 
                         <div class="pt-2">
-                            <flux:button variant="primary" type="submit" class="w-full !py-2.5 !text-base" :disabled="empty($cart)">
-                                {{ __('Completar Venta y Cobrar') }}
+                            <flux:button variant="primary" type="submit" class="w-full !py-3 !text-lg !font-bold" :disabled="empty($cart)">
+                                💳 {{ __('Completar Venta y Cobrar') }}
                             </flux:button>
                         </div>
                     </div>
@@ -906,7 +1198,7 @@ new #[Title('Registrar Venta')] class extends Component {
         </div>
     </div>
 
-    <!-- Modal Registro Rápido de Cliente -->
+    <!-- MODAL 1: Registro Rápido de Cliente -->
     <flux:modal name="modal-nuevo-cliente" class="md:w-96 space-y-6">
         <div>
             <flux:heading size="lg">{{ __('Nuevo Cliente Rápido') }}</flux:heading>
@@ -987,4 +1279,47 @@ new #[Title('Registrar Venta')] class extends Component {
             </div>
         </form>
     </flux:modal>
+
+    <!-- MODAL 2: Venta Completada con Éxito y Ticket -->
+    @if($showSuccessModal && $completedVentaId)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-sm">
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
+                
+                <div class="size-16 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <flux:icon.check-circle class="size-10" />
+                </div>
+
+                <div>
+                    <flux:heading size="xl" class="text-emerald-600">{{ __('¡Venta Registrada!') }}</flux:heading>
+                    <div class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mt-1">{{ $completedComprobante }}</div>
+                    <div class="text-xs text-zinc-500">{{ __('Stock descontado y registrado en Kardex.') }}</div>
+                </div>
+
+                <!-- Caja de Vuelto si hubo efectivo -->
+                @if($completedVuelto > 0)
+                    <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1">
+                        <div class="text-xs uppercase font-bold text-emerald-800 dark:text-emerald-300">{{ __('Vuelto a Entregar al Cliente') }}</div>
+                        <div class="text-3xl font-black text-emerald-700 dark:text-emerald-300">
+                            S/ {{ number_format($completedVuelto, 2) }}
+                        </div>
+                    </div>
+                @endif
+
+                <div class="text-sm font-bold text-zinc-900 dark:text-white">
+                    {{ __('Total Cobrado: ') }} S/ {{ number_format($completedTotal, 2) }}
+                </div>
+
+                <!-- Acciones de Ticket e Impresión -->
+                <div class="space-y-2 pt-2">
+                    <flux:button variant="primary" class="w-full !py-2.5 !text-base" icon="printer" :href="route('admin.ventas.ticket', $completedVentaId)" target="_blank">
+                        🖨️ {{ __('Imprimir Ticket Térmico (80mm)') }}
+                    </flux:button>
+
+                    <flux:button variant="ghost" class="w-full" wire:click="reiniciarVenta">
+                        ➕ {{ __('Iniciar Siguiente Venta') }}
+                    </flux:button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

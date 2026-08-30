@@ -44,6 +44,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.ver',
             'ventas.crear',
 
+            // Control de Cajas y Turnos
+            'cajas.ver',
+            'cajas.crear',
+            'cajas.movimientos',
+            'cajas.cerrar',
+
             // Promociones y Descuentos
             'promociones.ver',
             'promociones.crear',
@@ -121,6 +127,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'kardex.ver',
             'ventas.ver',
             'ventas.crear',
+            'cajas.ver',
+            'cajas.crear',
+            'cajas.movimientos',
+            'cajas.cerrar',
             'promociones.ver',
             'promociones.crear',
             'clientes.ver',
@@ -135,6 +145,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'productos.ver',
             'ventas.ver',
             'ventas.crear',
+            'cajas.ver',
+            'cajas.crear',
+            'cajas.movimientos',
+            'cajas.cerrar',
             'clientes.ver',
             'clientes.crear',
             'clientes.editar',
