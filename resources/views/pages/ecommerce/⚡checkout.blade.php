@@ -1,14 +1,14 @@
 <?php
 
-use App\Models\Venta;
-use App\Models\VentaDetalle;
-use App\Models\Variacion;
+use App\Models\Cupon;
 use App\Models\Inventario;
 use App\Models\Kardex;
-use App\Models\Almacen;
-use App\Models\TipoDocumento;
 use App\Models\Sede;
-use App\Models\Cupon;
+use App\Models\Serie;
+use App\Models\TipoDocumento;
+use App\Models\Variacion;
+use App\Models\Venta;
+use App\Models\VentaDetalle;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -279,15 +279,40 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                     ['nombre' => 'Boleta de Venta', 'descripcion' => 'Boleta de Venta Electrónica', 'activo' => true]
                 );
 
-            // Get serie and correlativo (preferencia serie web)
-            $serieRecord = DB::table('series')
-                ->where('tipo_documento_id', $tipoDoc->id)
+            // Get or create Serie for Web
+            $defaultSedeId = $empresa->almacenWeb?->sede_id ?? Sede::first()?->id ?? 1;
+            
+            $serieModel = Serie::where('tipo_documento_id', $tipoDoc->id)
                 ->whereIn('tipo_origen', ['web', 'todos'])
-                ->first()
-                ?? DB::table('series')->where('tipo_documento_id', $tipoDoc->id)->first();
+                ->lockForUpdate()
+                ->first();
 
-            $serie = $serieRecord ? $serieRecord->serie : 'EB01';
-            $correlativo = $serieRecord ? $serieRecord->correlativo : 1;
+            if (! $serieModel) {
+                $serieModel = Serie::where('tipo_documento_id', $tipoDoc->id)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if (! $serieModel) {
+                $serieModel = Serie::create([
+                    'sede_id' => $defaultSedeId,
+                    'tipo_documento_id' => $tipoDoc->id,
+                    'serie' => 'EB01',
+                    'correlativo' => 1,
+                    'tipo_origen' => 'web',
+                    'activo' => true,
+                ]);
+            }
+
+            // Ensure correlativo is higher than any existing sale with this tipo_documento and serie
+            $maxCorrelativoUsado = (int) Venta::where('tipo_documento_id', $tipoDoc->id)
+                ->where('serie', $serieModel->serie)
+                ->max('correlativo');
+
+            $correlativoActual = max((int) $serieModel->correlativo, $maxCorrelativoUsado + 1);
+
+            $serie = $serieModel->serie;
+            $correlativo = $correlativoActual;
 
             // Build delivery notes
             $notasEntrega = $this->tipoEntrega === 'recojo'
@@ -312,6 +337,11 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                 'metodo_pago' => $this->metodoPago,
                 'cupon_id' => $this->appliedCouponId,
                 'comentarios' => $comentarioFinal,
+            ]);
+
+            // Increment Serie Model correlativo
+            $serieModel->update([
+                'correlativo' => $correlativo + 1,
             ]);
 
             // Decrement coupon uses
@@ -357,13 +387,6 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                         'creado_por_usuario_id' => Auth::id(),
                     ]);
                 }
-            }
-
-            // Increment correlativo
-            if ($serieRecord) {
-                DB::table('series')
-                    ->where('id', $serieRecord->id)
-                    ->increment('correlativo');
             }
 
             // Clear cart
