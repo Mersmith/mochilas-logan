@@ -26,7 +26,7 @@ return new class extends Migration
             $table->decimal('costo_envio', 10, 2)->default(0);
             $table->decimal('total', 10, 2);
 
-            $table->enum('tipo_pago', ['online', 'contraentrega']);
+            $table->string('tipo_pago', 30)->default('pos'); // 'pos', 'online', etc.
             $table->string('metodo_pago')->nullable();
 
             $table->foreignId('direccion_id')->nullable()->constrained('direcciones')->onDelete('set null');
