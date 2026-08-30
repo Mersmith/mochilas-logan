@@ -17,7 +17,8 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Computed;
 use Flux\Flux;
 
-new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class extends Component {
+new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
+    class extends Component {
     // Delivery
     public string $tipoEntrega = 'recojo';   // 'recojo' or 'envio'
     public ?int $sedeRecojo = null;
@@ -35,7 +36,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
     public string $comentarios = '';
 
     // Número de WhatsApp oficial de atención
-    public string $telefonoWhatsappTienda = '51999999999';
+    public string $telefonoWhatsappTienda = '51916647675';
 
     /**
      * Mount the component and initialize.
@@ -71,20 +72,26 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
         $tot = $this->resumen;
 
         $msg = "🎒 *¡HOLA MOCHILAS LOGAN! Deseo realizar un nuevo pedido:*\n\n";
-        
+
         if ($user) {
             $msg .= "👤 *Cliente:* " . $user->name . "\n";
-            if ($user->email) $msg .= "📧 *Email:* " . $user->email . "\n";
-            if ($cliente?->telefono) $msg .= "📱 *Teléfono:* " . $cliente->telefono . "\n";
-            if ($cliente?->dni) $msg .= "🪪 *DNI:* " . $cliente->dni . "\n";
-            if ($cliente?->ruc) $msg .= "🏢 *RUC:* " . $cliente->ruc . " - " . $cliente->razon_social . "\n";
+            if ($user->email)
+                $msg .= "📧 *Email:* " . $user->email . "\n";
+            if ($cliente?->telefono)
+                $msg .= "📱 *Teléfono:* " . $cliente->telefono . "\n";
+            if ($cliente?->dni)
+                $msg .= "🪪 *DNI:* " . $cliente->dni . "\n";
+            if ($cliente?->ruc)
+                $msg .= "🏢 *RUC:* " . $cliente->ruc . " - " . $cliente->razon_social . "\n";
         }
 
         $msg .= "\n📦 *PRODUCTOS DEL PEDIDO:*\n";
-        foreach ($items as $i => $item) {
-            $msg .= ($i + 1) . ". *" . $item['nombre'] . "*\n";
+        $i = 1;
+        foreach ($items as $item) {
+            $msg .= $i . ". *" . $item['nombre'] . "*\n";
             $msg .= "   • " . $item['detalles'] . " | Cant: " . $item['cantidad'] . "\n";
             $msg .= "   • Subtotal: S/ " . number_format($item['subtotal'], 2) . "\n";
+            $i++;
         }
 
         $msg .= "\n🚚 *MODALIDAD DE ENTREGA:* ";
@@ -356,7 +363,8 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 <div class="max-w-6xl mx-auto">
     <!-- Back to cart -->
     <div class="mb-6">
-        <a href="{{ route('carrito') }}" wire:navigate class="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-black dark:hover:text-white transition-colors">
+        <a href="{{ route('carrito') }}" wire:navigate
+            class="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-black dark:hover:text-white transition-colors">
             <flux:icon name="arrow-left" class="size-4" />
             {{ __('Volver a la bolsa') }}
         </a>
@@ -370,25 +378,35 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
             </flux:heading>
 
             <!-- Sección 1: Punto de Entrega -->
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
-                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Punto de entrega') }}</flux:heading>
+            <div
+                class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
+                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Punto de entrega') }}
+                </flux:heading>
 
                 <div class="flex gap-4">
-                    <button wire:click.prevent="$set('tipoEntrega', 'recojo')" class="flex-1 border rounded-xl p-4 text-left transition-all {{ $tipoEntrega === 'recojo' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                    <button wire:click.prevent="$set('tipoEntrega', 'recojo')"
+                        class="flex-1 border rounded-xl p-4 text-left transition-all {{ $tipoEntrega === 'recojo' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
                         <div class="flex items-center gap-3">
-                            <flux:icon name="map-pin" class="size-5 {{ $tipoEntrega === 'recojo' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <flux:icon name="map-pin"
+                                class="size-5 {{ $tipoEntrega === 'recojo' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
                             <div>
-                                <div class="text-sm font-bold {{ $tipoEntrega === 'recojo' ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400' }}">{{ __('Retiro en Tienda') }}</div>
+                                <div
+                                    class="text-sm font-bold {{ $tipoEntrega === 'recojo' ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400' }}">
+                                    {{ __('Retiro en Tienda') }}</div>
                                 <div class="text-xxs text-emerald-600 font-semibold">{{ __('Gratis') }}</div>
                             </div>
                         </div>
                     </button>
 
-                    <button wire:click.prevent="$set('tipoEntrega', 'envio')" class="flex-1 border rounded-xl p-4 text-left transition-all {{ $tipoEntrega === 'envio' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                    <button wire:click.prevent="$set('tipoEntrega', 'envio')"
+                        class="flex-1 border rounded-xl p-4 text-left transition-all {{ $tipoEntrega === 'envio' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
                         <div class="flex items-center gap-3">
-                            <flux:icon name="truck" class="size-5 {{ $tipoEntrega === 'envio' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <flux:icon name="truck"
+                                class="size-5 {{ $tipoEntrega === 'envio' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
                             <div>
-                                <div class="text-sm font-bold {{ $tipoEntrega === 'envio' ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400' }}">{{ __('Envío a Domicilio') }}</div>
+                                <div
+                                    class="text-sm font-bold {{ $tipoEntrega === 'envio' ? 'text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-400' }}">
+                                    {{ __('Envío a Domicilio') }}</div>
                                 <div class="text-xxs text-zinc-500 font-semibold">S/ 9.90</div>
                             </div>
                         </div>
@@ -397,10 +415,13 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
                 @if($tipoEntrega === 'recojo')
                     <div class="space-y-3 pt-2">
-                        <flux:text size="sm" class="font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">{{ __('Selecciona tu punto de recojo') }}</flux:text>
+                        <flux:text size="sm" class="font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                            {{ __('Selecciona tu punto de recojo') }}</flux:text>
                         @foreach($this->sedes as $sede)
-                            <label class="flex items-start gap-3 p-4 border rounded-xl cursor-pointer transition-all {{ $sedeRecojo === $sede->id ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                                <input type="radio" wire:model.live="sedeRecojo" value="{{ $sede->id }}" class="mt-0.5 accent-black dark:accent-white" />
+                            <label
+                                class="flex items-start gap-3 p-4 border rounded-xl cursor-pointer transition-all {{ $sedeRecojo === $sede->id ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                                <input type="radio" wire:model.live="sedeRecojo" value="{{ $sede->id }}"
+                                    class="mt-0.5 accent-black dark:accent-white" />
                                 <div>
                                     <div class="text-sm font-bold text-zinc-900 dark:text-white">{{ $sede->nombre }}</div>
                                     <div class="text-xxs text-zinc-500">{{ $sede->direccion }}</div>
@@ -411,69 +432,98 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                     </div>
                 @else
                     <div class="pt-2">
-                        <flux:textarea wire:model.defer="direccionEnvio" :label="__('Dirección de envío completa')" placeholder="Av. Ejemplo 123, Distrito, Ciudad" rows="2" />
+                        <flux:textarea wire:model.defer="direccionEnvio" :label="__('Dirección de envío completa')"
+                            placeholder="Av. Ejemplo 123, Distrito, Ciudad" rows="2" />
                     </div>
                 @endif
             </div>
 
             <!-- Sección 2: Medio de Pago -->
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
-                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Medio de pago') }}</flux:heading>
+            <div
+                class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
+                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Medio de pago') }}
+                </flux:heading>
 
                 @if(auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista')
-                    <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl flex items-start gap-3">
+                    <div
+                        class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl flex items-start gap-3">
                         <flux:icon name="exclamation-circle" class="size-5 text-amber-600 mt-0.5" />
                         <div>
-                            <div class="text-sm font-bold text-amber-800 dark:text-amber-500">{{ __('Pedido B2B Mayorista') }}</div>
-                            <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">{{ __('Tu pedido se registrará como "Pendiente de Pago". Nos comunicaremos contigo para coordinar el abono o transferencia por el total con descuento mayorista.') }}</div>
+                            <div class="text-sm font-bold text-amber-800 dark:text-amber-500">
+                                {{ __('Pedido B2B Mayorista') }}</div>
+                            <div class="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                                {{ __('Tu pedido se registrará como "Pendiente de Pago". Nos comunicaremos contigo para coordinar el abono o transferencia por el total con descuento mayorista.') }}
+                            </div>
                         </div>
                     </div>
                 @else
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <button wire:click.prevent="$set('metodoPago', 'transferencia')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                            <flux:icon name="building-library" class="size-6 mx-auto mb-2 {{ $metodoPago === 'transferencia' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                            <div class="text-xs font-bold {{ $metodoPago === 'transferencia' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Transferencia') }}</div>
+                        <button wire:click.prevent="$set('metodoPago', 'transferencia')"
+                            class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="building-library"
+                                class="size-6 mx-auto mb-2 {{ $metodoPago === 'transferencia' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div
+                                class="text-xs font-bold {{ $metodoPago === 'transferencia' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">
+                                {{ __('Transferencia') }}</div>
                         </button>
 
-                        <button wire:click.prevent="$set('metodoPago', 'tarjeta')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'tarjeta' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                            <flux:icon name="credit-card" class="size-6 mx-auto mb-2 {{ $metodoPago === 'tarjeta' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                            <div class="text-xs font-bold {{ $metodoPago === 'tarjeta' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Tarjeta') }}</div>
+                        <button wire:click.prevent="$set('metodoPago', 'tarjeta')"
+                            class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'tarjeta' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="credit-card"
+                                class="size-6 mx-auto mb-2 {{ $metodoPago === 'tarjeta' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div
+                                class="text-xs font-bold {{ $metodoPago === 'tarjeta' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">
+                                {{ __('Tarjeta') }}</div>
                         </button>
 
-                        <button wire:click.prevent="$set('metodoPago', 'yape_plin')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'yape_plin' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                            <flux:icon name="device-phone-mobile" class="size-6 mx-auto mb-2 {{ $metodoPago === 'yape_plin' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
-                            <div class="text-xs font-bold {{ $metodoPago === 'yape_plin' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Yape / Plin') }}</div>
+                        <button wire:click.prevent="$set('metodoPago', 'yape_plin')"
+                            class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'yape_plin' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="device-phone-mobile"
+                                class="size-6 mx-auto mb-2 {{ $metodoPago === 'yape_plin' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
+                            <div
+                                class="text-xs font-bold {{ $metodoPago === 'yape_plin' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">
+                                {{ __('Yape / Plin') }}</div>
                         </button>
 
-                        <button wire:click.prevent="$set('metodoPago', 'whatsapp')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'whatsapp' ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
-                            <flux:icon name="chat-bubble-left-right" class="size-6 mx-auto mb-2 {{ $metodoPago === 'whatsapp' ? 'text-emerald-600' : 'text-zinc-400' }}" />
-                            <div class="text-xs font-bold {{ $metodoPago === 'whatsapp' ? 'text-emerald-700 dark:text-emerald-400' : 'text-zinc-500' }}">{{ __('WhatsApp') }}</div>
+                        <button wire:click.prevent="$set('metodoPago', 'whatsapp')"
+                            class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'whatsapp' ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="chat-bubble-left-right"
+                                class="size-6 mx-auto mb-2 {{ $metodoPago === 'whatsapp' ? 'text-emerald-600' : 'text-zinc-400' }}" />
+                            <div
+                                class="text-xs font-bold {{ $metodoPago === 'whatsapp' ? 'text-emerald-700 dark:text-emerald-400' : 'text-zinc-500' }}">
+                                {{ __('WhatsApp') }}</div>
                         </button>
                     </div>
                 @endif
             </div>
 
             <!-- Sección 3: Productos en tu pedido (resumen compacto) -->
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4">
-                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Productos en tu pedido') }}</flux:heading>
+            <div
+                class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4">
+                <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">
+                    {{ __('Productos en tu pedido') }}</flux:heading>
 
                 <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @foreach($this->items as $item)
                         <div class="py-3 flex items-center gap-4 first:pt-0 last:pb-0">
-                            <div class="w-14 h-14 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-lg flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 overflow-hidden">
+                            <div
+                                class="w-14 h-14 flex-shrink-0 bg-zinc-100 dark:bg-zinc-950 rounded-lg flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 overflow-hidden">
                                 @if(!empty($item['imagen_url']))
-                                    <img src="{{ $item['imagen_url'] }}" alt="{{ $item['nombre'] }}" class="w-full h-full object-cover" />
+                                    <img src="{{ $item['imagen_url'] }}" alt="{{ $item['nombre'] }}"
+                                        class="w-full h-full object-cover" />
                                 @else
                                     <flux:icon name="archive-box" class="size-6 text-zinc-300 dark:text-zinc-700" />
                                 @endif
                             </div>
                             <div class="flex-1 min-w-0">
-                                <div class="text-sm font-bold text-zinc-900 dark:text-white truncate">{{ $item['nombre'] }}</div>
+                                <div class="text-sm font-bold text-zinc-900 dark:text-white truncate">{{ $item['nombre'] }}
+                                </div>
                                 <div class="text-xxs text-zinc-500">{{ $item['detalles'] }}</div>
                                 <div class="text-xxs text-zinc-400 mt-0.5">{{ __('Cant:') }} {{ $item['cantidad'] }}</div>
                             </div>
                             <div class="text-right flex-shrink-0">
-                                <div class="text-sm font-extrabold text-zinc-900 dark:text-white">S/ {{ number_format($item['subtotal'], 2) }}</div>
+                                <div class="text-sm font-extrabold text-zinc-900 dark:text-white">S/
+                                    {{ number_format($item['subtotal'], 2) }}</div>
                             </div>
                         </div>
                     @endforeach
@@ -482,26 +532,33 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
             <!-- Notas / Comentarios -->
             <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6">
-                <flux:textarea wire:model.defer="comentarios" :label="__('¿Algún comentario adicional? (opcional)')" placeholder="Ej: Entregar en portería, llamar antes, etc." rows="2" />
+                <flux:textarea wire:model.defer="comentarios" :label="__('¿Algún comentario adicional? (opcional)')"
+                    placeholder="Ej: Entregar en portería, llamar antes, etc." rows="2" />
             </div>
         </div>
 
         <!-- Columna Derecha: Resumen de la Compra (Sticky) -->
         <div class="lg:col-span-1">
-            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5 shadow-sm sticky top-24">
-                <flux:heading size="lg" class="font-extrabold text-zinc-900 dark:text-white">{{ __('Resumen de la compra') }}</flux:heading>
+            <div
+                class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5 shadow-sm sticky top-24">
+                <flux:heading size="lg" class="font-extrabold text-zinc-900 dark:text-white">
+                    {{ __('Resumen de la compra') }}</flux:heading>
 
                 @guest
                     <!-- Banner de Iniciar Sesión para Checkout -->
-                    <div class="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-start gap-3">
+                    <div
+                        class="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-start gap-3">
                         <flux:icon name="user-circle" class="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                         <div class="text-xs text-blue-900 dark:text-blue-200">
                             <p class="font-bold">{{ __('¿Ya tienes cuenta?') }}</p>
-                            <p class="mt-0.5 text-blue-700 dark:text-blue-300">{{ __('Inicia sesión para vincular tu pedido y acumular historial.') }}</p>
+                            <p class="mt-0.5 text-blue-700 dark:text-blue-300">
+                                {{ __('Inicia sesión para vincular tu pedido y acumular historial.') }}</p>
                             <div class="flex items-center gap-2 mt-2">
-                                <a href="{{ route('login') }}" wire:navigate class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Iniciar Sesión') }}</a>
+                                <a href="{{ route('login') }}" wire:navigate
+                                    class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Iniciar Sesión') }}</a>
                                 <span>•</span>
-                                <a href="{{ route('register') }}" wire:navigate class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Crear Cuenta') }}</a>
+                                <a href="{{ route('register') }}" wire:navigate
+                                    class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Crear Cuenta') }}</a>
                             </div>
                         </div>
                     </div>
@@ -510,19 +567,22 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                 <div class="space-y-3 text-sm">
                     <div class="flex justify-between">
                         <span class="text-zinc-500">{{ __('Productos') }} ({{ $this->resumen['total_items'] }})</span>
-                        <span class="font-semibold text-zinc-800 dark:text-zinc-200">S/ {{ number_format($this->resumen['subtotal'], 2) }}</span>
+                        <span class="font-semibold text-zinc-800 dark:text-zinc-200">S/
+                            {{ number_format($this->resumen['subtotal'], 2) }}</span>
                     </div>
 
                     @if($this->resumen['descuento_cupon'] > 0)
                         <div class="flex justify-between">
                             <span class="text-zinc-500">{{ __('Cupón') }}</span>
-                            <span class="font-semibold text-emerald-600">- S/ {{ number_format($this->resumen['descuento_cupon'], 2) }}</span>
+                            <span class="font-semibold text-emerald-600">- S/
+                                {{ number_format($this->resumen['descuento_cupon'], 2) }}</span>
                         </div>
                     @endif
 
                     <div class="flex justify-between">
                         <span class="text-zinc-500">{{ __('Entregas') }}</span>
-                        <span class="font-semibold {{ $this->resumen['costo_envio'] > 0 ? 'text-zinc-800 dark:text-zinc-200' : 'text-emerald-600' }}">
+                        <span
+                            class="font-semibold {{ $this->resumen['costo_envio'] > 0 ? 'text-zinc-800 dark:text-zinc-200' : 'text-emerald-600' }}">
                             {{ $this->resumen['costo_envio'] > 0 ? 'S/ ' . number_format($this->resumen['costo_envio'], 2) : __('Gratis') }}
                         </span>
                     </div>
@@ -532,26 +592,32 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
                 <div class="flex justify-between items-baseline">
                     <span class="text-base font-bold text-zinc-900 dark:text-white">{{ __('Total') }}</span>
-                    <span class="text-2xl font-extrabold text-zinc-900 dark:text-white">S/ {{ number_format($this->resumen['total'], 2) }}</span>
+                    <span class="text-2xl font-extrabold text-zinc-900 dark:text-white">S/
+                        {{ number_format($this->resumen['total'], 2) }}</span>
                 </div>
 
                 <!-- Coupon -->
                 <div class="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{{ __('¿Tienes un cupón?') }}</span>
+                        <span
+                            class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{{ __('¿Tienes un cupón?') }}</span>
                         @if($appliedCouponId)
-                            <flux:button variant="ghost" size="sm" wire:click.prevent="cancelarCupon" class="text-xxs text-rose-600 hover:text-rose-700">{{ __('Quitar') }}</flux:button>
+                            <flux:button variant="ghost" size="sm" wire:click.prevent="cancelarCupon"
+                                class="text-xxs text-rose-600 hover:text-rose-700">{{ __('Quitar') }}</flux:button>
                         @endif
                     </div>
                     @if(!$appliedCouponId)
                         <div class="flex gap-2">
                             <flux:input wire:model.defer="couponCode" placeholder="Código" size="sm" class="flex-1" />
-                            <flux:button variant="outline" size="sm" wire:click.prevent="aplicarCupon" class="font-semibold text-xs">{{ __('Aplicar') }}</flux:button>
+                            <flux:button variant="outline" size="sm" wire:click.prevent="aplicarCupon"
+                                class="font-semibold text-xs">{{ __('Aplicar') }}</flux:button>
                         </div>
                     @else
-                        <div class="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                        <div
+                            class="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
                             <flux:icon name="check-circle" class="size-4 text-emerald-600" />
-                            <span class="text-xxs font-bold text-emerald-700 dark:text-emerald-400">{{ $couponCode }} {{ __('aplicado') }} (- S/ {{ number_format($couponDiscountAmount, 2) }})</span>
+                            <span class="text-xxs font-bold text-emerald-700 dark:text-emerald-400">{{ $couponCode }}
+                                {{ __('aplicado') }} (- S/ {{ number_format($couponDiscountAmount, 2) }})</span>
                         </div>
                     @endif
                 </div>
@@ -559,20 +625,23 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                 <!-- Action Buttons: WhatsApp or Direct Payment -->
                 <div class="space-y-2.5">
                     @auth
-                        <flux:button variant="primary" wire:click.prevent="confirmarCompra" class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
+                        <flux:button variant="primary" wire:click.prevent="confirmarCompra"
+                            class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
                             <span wire:loading.remove wire:target="confirmarCompra">
                                 {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
                             </span>
                             <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
                         </flux:button>
                     @else
-                        <a href="{{ route('login') }}" wire:navigate class="w-full h-12 rounded-xl font-bold text-base bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity">
+                        <a href="{{ route('login') }}" wire:navigate
+                            class="w-full h-12 rounded-xl font-bold text-base bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity">
                             {{ __('Iniciar Sesión para Pagar') }}
                         </a>
                     @endauth
 
                     <!-- Botón Pedir por WhatsApp -->
-                    <a href="{{ $this->urlPedidoWhatsapp }}" target="_blank" rel="noopener noreferrer" class="w-full h-11 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 transition-colors shadow-sm">
+                    <a href="{{ $this->urlPedidoWhatsapp }}" target="_blank" rel="noopener noreferrer"
+                        class="w-full h-11 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 transition-colors shadow-sm">
                         <flux:icon name="chat-bubble-left-right" class="size-5" />
                         {{ __('Pedir por WhatsApp') }}
                     </a>
