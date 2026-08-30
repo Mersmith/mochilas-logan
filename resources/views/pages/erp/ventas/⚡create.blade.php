@@ -33,7 +33,7 @@ new #[Title('Registrar Venta')] class extends Component {
     public string $serie = '';
     public int $correlativo = 1;
     public string $fecha_venta = '';
-    public string $tipo_pago = 'online';
+    public string $tipo_pago = 'pos';
     public string $metodo_pago = 'efectivo';
     public string $nota = '';
 

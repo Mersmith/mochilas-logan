@@ -25,6 +25,9 @@ new #[Title('Historial de Ventas')] class extends Component {
     public string $search = '';
 
     #[Url]
+    public string $canal = 'todos'; // 'todos', 'online', 'pos'
+
+    #[Url]
     public string $estado_pago = 'todos';
 
     #[Url]
@@ -50,19 +53,41 @@ new #[Title('Historial de Ventas')] class extends Component {
     public string $descripcion_motivo = '';
     public array $itemsDevolucion = [];
 
+    public function cambiarEstadoPago(int $ventaId, string $nuevoEstado): void
+    {
+        if (! in_array($nuevoEstado, ['pagado', 'pendiente', 'cancelado'])) {
+            return;
+        }
+
+        $venta = Venta::findOrFail($ventaId);
+        $venta->update(['estado_pago' => $nuevoEstado]);
+        Flux::toast(variant: 'success', text: __('Estado de pago actualizado a: ') . ucfirst($nuevoEstado));
+    }
+
+    public function cambiarEstadoDespacho(int $ventaId, string $nuevoEstado): void
+    {
+        if (! in_array($nuevoEstado, ['pendiente', 'preparado', 'despachado', 'entregado'])) {
+            return;
+        }
+
+        $venta = Venta::findOrFail($ventaId);
+        $venta->update(['estado_despacho' => $nuevoEstado]);
+        Flux::toast(variant: 'success', text: __('Estado de despacho actualizado a: ') . ucfirst($nuevoEstado));
+    }
+
     /**
      * Reset pagination on search change.
      */
     public function updating($property)
     {
-        if (in_array($property, ['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta', 'perPage'])) {
+        if (in_array($property, ['search', 'canal', 'estado_pago', 'estado_despacho', 'desde', 'hasta', 'perPage'])) {
             $this->resetPage();
         }
     }
 
     public function resetFiltros()
     {
-        $this->reset(['search', 'estado_pago', 'estado_despacho', 'desde', 'hasta']);
+        $this->reset(['search', 'canal', 'estado_pago', 'estado_despacho', 'desde', 'hasta']);
         $this->perPage = 20;
         $this->resetPage();
     }
@@ -80,6 +105,7 @@ new #[Title('Historial de Ventas')] class extends Component {
                         $q->where('name', 'like', '%' . $this->search . '%');
                     });
             })
+            ->when($this->canal !== 'todos', fn ($q) => $q->where('tipo_pago', $this->canal))
             ->when($this->estado_pago !== 'todos', fn ($q) => $q->where('estado_pago', $this->estado_pago))
             ->when($this->estado_despacho !== 'todos', fn ($q) => $q->where('estado_despacho', $this->estado_despacho))
             ->when($this->desde, fn ($q) => $q->whereDate('created_at', '>=', $this->desde))
@@ -339,12 +365,17 @@ new #[Title('Historial de Ventas')] class extends Component {
                 <flux:input wire:model.live.debounce.300ms="search" icon="magnifying-glass" placeholder="{{ __('Buscar serie, correlativo o cliente...') }}" />
             </div>
             
+            <flux:select wire:model.live="canal" class="sm:w-44">
+                <option value="todos">{{ __('Todos los Canales') }}</option>
+                <option value="online">{{ __('E-commerce (Web)') }}</option>
+                <option value="pos">{{ __('Punto de Venta (POS)') }}</option>
+            </flux:select>
+            
             <flux:select wire:model.live="estado_pago" class="sm:w-44">
-                <option value="todos">{{ __('Estado Pago') }}</option>
-                <option value="pendiente">{{ __('Pendiente') }}</option>
+                <option value="todos">{{ __('Estado de Pago') }}</option>
                 <option value="pagado">{{ __('Pagado') }}</option>
-                <option value="reembolsado">{{ __('Reembolsado') }}</option>
-                <option value="cancelado">{{ __('Cancelado') }}</option>
+                <option value="pendiente">{{ __('Pendiente de Pago') }}</option>
+                <option value="cancelado">{{ __('Anulado / Cancelado') }}</option>
             </flux:select>
             
             <flux:select wire:model.live="estado_despacho" class="sm:w-44">
@@ -397,10 +428,11 @@ new #[Title('Historial de Ventas')] class extends Component {
                 <thead>
                     <tr class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Comprobante') }}</th>
+                        <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Canal') }}</th>
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Cliente') }}</th>
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Almacén') }}</th>
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Fecha') }}</th>
-                        <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300 text-center">{{ __('Pago') }}</th>
+                        <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300 text-center">{{ __('Medio de Pago') }}</th>
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300 text-right">{{ __('Total') }}</th>
                         <th class="p-4 font-semibold text-zinc-700 dark:text-zinc-300 text-center">{{ __('Estado') }}</th>
                         <th class="p-4 text-right">{{ __('Acciones') }}</th>
@@ -410,29 +442,64 @@ new #[Title('Historial de Ventas')] class extends Component {
                     @forelse($this->ventas as $venta)
                         <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
                             <td class="p-4 font-medium text-zinc-900 dark:text-white">
-                                {{ $venta->tipoDocumento->nombre }} ({{ $venta->serie }}-{{ str_pad($venta->correlativo, 6, '0', STR_PAD_LEFT) }})
+                                <div class="font-bold">{{ $venta->tipoDocumento->nombre }}</div>
+                                <div class="text-xs text-zinc-500 font-mono">{{ $venta->serie }}-{{ str_pad($venta->correlativo, 6, '0', STR_PAD_LEFT) }}</div>
+                            </td>
+                            <td class="p-4">
+                                @if($venta->tipo_pago === 'online')
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                        <flux:icon name="globe-alt" class="size-3.5" />
+                                        {{ __('E-commerce') }}
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                        <flux:icon name="building-storefront" class="size-3.5" />
+                                        {{ __('POS Físico') }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="p-4 text-zinc-600 dark:text-zinc-400">
-                                {{ $venta->user->name }}
+                                {{ $venta->user->name ?? 'Invitado' }}
                             </td>
                             <td class="p-4 text-zinc-600 dark:text-zinc-400">
                                 {{ $venta->movimientosKardex->first()?->almacen?->nombre ?? '-' }}
                             </td>
                             <td class="p-4 text-zinc-600 dark:text-zinc-400">
-                                {{ $venta->created_at->format('d/m/Y') }}
+                                {{ $venta->created_at->format('d/m/Y H:i') }}
                             </td>
                             <td class="p-4 text-center text-zinc-600 dark:text-zinc-400">
-                                <span class="capitalize">{{ $venta->metodo_pago }}</span>
+                                <span class="capitalize">{{ str_replace('_', ' ', $venta->metodo_pago) }}</span>
                             </td>
                             <td class="p-4 text-right font-bold text-zinc-900 dark:text-white">
                                 S/ {{ number_format($venta->total, 2) }}
                             </td>
                             <td class="p-4 text-center">
-                                @if($venta->estado_pago === 'pagado')
-                                    <flux:badge color="success">{{ __('Completado') }}</flux:badge>
-                                @else
-                                    <flux:badge color="danger">{{ __('Anulado') }}</flux:badge>
-                                @endif
+                                <flux:dropdown>
+                                    @if($venta->estado_pago === 'pagado')
+                                        <button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:opacity-80 transition cursor-pointer">
+                                            <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                            {{ __('Pagado') }}
+                                            <flux:icon name="chevron-down" class="size-3 opacity-60" />
+                                        </button>
+                                    @elseif($venta->estado_pago === 'pendiente')
+                                        <button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:opacity-80 transition cursor-pointer">
+                                            <span class="size-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                            {{ __('Pendiente') }}
+                                            <flux:icon name="chevron-down" class="size-3 opacity-60" />
+                                        </button>
+                                    @else
+                                        <button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:opacity-80 transition cursor-pointer">
+                                            <span class="size-1.5 rounded-full bg-rose-500"></span>
+                                            {{ __('Anulado') }}
+                                            <flux:icon name="chevron-down" class="size-3 opacity-60" />
+                                        </button>
+                                    @endif
+                                    <flux:menu>
+                                        <flux:menu.item wire:click="cambiarEstadoPago({{ $venta->id }}, 'pagado')" icon="check-circle" class="text-emerald-600 font-semibold">{{ __('Marcar como Pagado') }}</flux:menu.item>
+                                        <flux:menu.item wire:click="cambiarEstadoPago({{ $venta->id }}, 'pendiente')" icon="clock" class="text-amber-600">{{ __('Marcar como Pendiente') }}</flux:menu.item>
+                                        <flux:menu.item wire:click="cambiarEstadoPago({{ $venta->id }}, 'cancelado')" icon="x-circle" class="text-rose-600">{{ __('Marcar como Anulado / Cancelado') }}</flux:menu.item>
+                                    </flux:menu>
+                                </flux:dropdown>
                             </td>
                             <td class="p-4 text-right space-x-1">
                                 <flux:button variant="ghost" icon="printer" size="sm" :href="route('admin.ventas.ticket', $venta->id)" target="_blank" title="{{ __('Ticket Térmico (80mm)') }}" />
@@ -547,7 +614,7 @@ new #[Title('Historial de Ventas')] class extends Component {
                         </table>
                     </div>
 
-                    <!-- Totales -->
+                    <!-- Totales y Estado -->
                     <div class="space-y-1.5 text-right text-xs">
                         <div class="flex justify-between text-zinc-500">
                             <span>{{ __('Subtotal:') }}</span>
@@ -556,6 +623,26 @@ new #[Title('Historial de Ventas')] class extends Component {
                         <div class="flex justify-between text-base font-bold text-zinc-900 dark:text-white border-t border-zinc-100 dark:border-zinc-800 pt-2">
                             <span>{{ __('Total:') }}</span>
                             <span>S/ {{ number_format($this->selectedVenta->total, 2) }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Cambiar Estado desde el Modal -->
+                    <div class="p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 rounded-lg flex items-center justify-between">
+                        <div class="text-xs">
+                            <span class="text-zinc-400 block">{{ __('Estado Actual:') }}</span>
+                            <span class="font-bold text-zinc-800 dark:text-zinc-200 capitalize">{{ $this->selectedVenta->estado_pago }}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            @if($this->selectedVenta->estado_pago !== 'pagado')
+                                <flux:button size="xs" variant="primary" icon="check-circle" wire:click="cambiarEstadoPago({{ $this->selectedVenta->id }}, 'pagado')">
+                                    {{ __('Marcar como Pagado') }}
+                                </flux:button>
+                            @endif
+                            @if($this->selectedVenta->estado_pago !== 'pendiente')
+                                <flux:button size="xs" variant="subtle" icon="clock" wire:click="cambiarEstadoPago({{ $this->selectedVenta->id }}, 'pendiente')">
+                                    {{ __('Marcar como Pendiente') }}
+                                </flux:button>
+                            @endif
                         </div>
                     </div>
                 </div>
