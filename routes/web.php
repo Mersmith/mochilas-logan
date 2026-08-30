@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Artisan;
 
 // Página de inicio
 Route::view('/', 'welcome')->name('home');
@@ -38,4 +39,33 @@ Route::get('dashboard', function () {
     return redirect()->route('login');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-require __DIR__.'/settings.php';
+require __DIR__ . '/settings.php';
+
+// Crear Storage Link
+Route::get('/symlink', function () {
+    Artisan::call('storage:link');
+});
+
+// Limpiar y resetear todo el caché
+Route::get('/clear-cache', function () {
+    Artisan::call('config:clear');
+    Artisan::call('cache:clear');
+    Artisan::call('route:clear');
+    Artisan::call('view:clear');
+    Artisan::call('storage:link');
+    return '¡Caché limpiado y Storage Link creado con éxito!';
+});
+// Opcional: Optimizar una vez que ya funcione todo
+Route::get('/optimize-app', function () {
+    Artisan::call('optimize');
+    return '¡Aplicación optimizada con éxito!';
+});
+
+// Ejecutar migrate:fresh --seed
+Route::get('/run-migrations', function () {
+    Artisan::call('migrate:fresh', [
+        '--seed' => true,
+        '--force' => true,
+    ]);
+    return '<pre>' . Artisan::output() . '</pre><br>¡Migrate Fresh con Seeds ejecutado con éxito!';
+});
