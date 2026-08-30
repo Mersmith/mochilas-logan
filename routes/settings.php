@@ -6,7 +6,7 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
     Route::livewire('settings/profile', 'pages::settings.profile')->name('profile.edit');
-    
+
     // Rutas de cliente ("Mi Cuenta")
     Route::livewire('settings/direcciones', 'pages::settings.direcciones')->name('direcciones');
     Route::livewire('settings/pagos', 'pages::settings.pagos')->name('pagos');

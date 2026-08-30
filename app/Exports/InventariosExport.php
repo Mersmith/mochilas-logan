@@ -2,15 +2,14 @@
 
 namespace App\Exports;
 
-use App\Models\Inventario;
 use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class InventariosExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
+class InventariosExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping, WithStyles
 {
     protected $query;
 
@@ -35,7 +34,7 @@ class InventariosExport implements FromQuery, WithHeadings, WithMapping, ShouldA
             'Stock Base',
             'Stock Mínimo',
             'Estado Stock',
-            'Última Actualización'
+            'Última Actualización',
         ];
     }
 
@@ -44,7 +43,7 @@ class InventariosExport implements FromQuery, WithHeadings, WithMapping, ShouldA
         $atributos = '-';
         if ($inventario->variacion && $inventario->variacion->valores->count() > 0) {
             $atributos = $inventario->variacion->valores->map(function ($val) {
-                return $val->atributo->nombre . ': ' . $val->valor;
+                return $val->atributo->nombre.': '.$val->valor;
             })->implode(', ');
         }
 
@@ -64,7 +63,7 @@ class InventariosExport implements FromQuery, WithHeadings, WithMapping, ShouldA
             $inventario->stock_base,
             $inventario->stock_minimo,
             $estadoStock,
-            $inventario->updated_at ? $inventario->updated_at->format('Y-m-d H:i:s') : 'N/A'
+            $inventario->updated_at ? $inventario->updated_at->format('Y-m-d H:i:s') : 'N/A',
         ];
     }
 

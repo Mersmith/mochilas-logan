@@ -42,8 +42,8 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
      */
     public function mount(): void
     {
-        $cart = session()->get('public_cart', []);
-        if (empty($cart)) {
+        $items = \App\Services\CartService::getValidatedItems();
+        if (empty($items)) {
             $this->redirect(route('carrito'), navigate: true);
             return;
         }
@@ -121,62 +121,12 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
     }
 
     /**
-     * Build enriched line items from session cart.
+     * Build enriched line items from CartService.
      */
     #[Computed]
     public function items(): array
     {
-        $cart = session()->get('public_cart', []);
-        $items = [];
-
-        $nombreListaPrecio = 'Precio Menor';
-        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
-            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
-        }
-
-        foreach ($cart as $key => $item) {
-            $variacion = Variacion::with(['producto.marca', 'producto.descuentos', 'valores.atributo', 'precios.listaPrecio', 'inventarios'])
-                ->find($item['variacion_id']);
-
-            if (!$variacion) {
-                continue;
-            }
-
-            $stock = (int) $variacion->inventarios->sum('stock_base');
-            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
-
-            $activeDiscount = $variacion->producto->descuentos
-                ->where('activo', true)
-                ->filter(fn($d) => (!$d->fecha_inicio || $d->fecha_inicio <= now()) && (!$d->fecha_fin || $d->fecha_fin >= now()))
-                ->first();
-
-            $pct = $activeDiscount ? (int) $activeDiscount->porcentaje_descuento : 0;
-            $finalPrice = $pct > 0 ? round($basePrice * (1 - $pct / 100), 2) : $basePrice;
-
-            $descAttr = $variacion->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(' | ');
-
-            $imagenUrl = $variacion->producto->getFirstMediaUrl('imagen_principal', 'thumb') 
-                ?: $variacion->producto->getFirstMediaUrl('imagen_principal')
-                ?: $variacion->producto->getFirstMediaUrl('galeria', 'thumb')
-                ?: $variacion->producto->getFirstMediaUrl('galeria');
-
-            $items[$key] = [
-                'key' => $key,
-                'variacion_id' => $variacion->id,
-                'nombre' => $variacion->producto->nombre,
-                'marca' => $variacion->producto->marca->nombre,
-                'sku' => $variacion->sku,
-                'detalles' => $descAttr,
-                'imagen_url' => $imagenUrl,
-                'cantidad' => min($item['cantidad'], $stock),
-                'stock' => $stock,
-                'precio_base' => $basePrice,
-                'precio_final' => $finalPrice,
-                'subtotal' => round($finalPrice * min($item['cantidad'], $stock), 2),
-            ];
-        }
-
-        return $items;
+        return \App\Services\CartService::getValidatedItems();
     }
 
     /**
@@ -393,7 +343,8 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                     ->increment('correlativo');
             }
 
-            // Clear session cart
+            // Clear cart
+            \App\Services\CartService::clear();
             session()->forget('public_cart');
         });
 

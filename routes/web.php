@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Route;
 
 // Página de inicio
 Route::view('/', 'welcome')->name('home');
@@ -39,7 +39,7 @@ Route::get('dashboard', function () {
     return redirect()->route('login');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';
 
 // Crear Storage Link
 Route::get('/symlink', function () {
@@ -53,11 +53,13 @@ Route::get('/clear-cache', function () {
     Artisan::call('route:clear');
     Artisan::call('view:clear');
     Artisan::call('storage:link');
+
     return '¡Caché limpiado y Storage Link creado con éxito!';
 });
 // Opcional: Optimizar una vez que ya funcione todo
 Route::get('/optimize-app', function () {
     Artisan::call('optimize');
+
     return '¡Aplicación optimizada con éxito!';
 });
 
@@ -67,5 +69,6 @@ Route::get('/run-migrations', function () {
         '--seed' => true,
         '--force' => true,
     ]);
-    return '<pre>' . Artisan::output() . '</pre><br>¡Migrate Fresh con Seeds ejecutado con éxito!';
+
+    return '<pre>'.Artisan::output().'</pre><br>¡Migrate Fresh con Seeds ejecutado con éxito!';
 });

@@ -10,71 +10,12 @@ use Flux\Flux;
 new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Component {
 
     /**
-     * Get cart items from session with full variation data.
+     * Get validated cart items in real time.
      */
     #[Computed]
     public function items(): array
     {
-        $cart = session()->get('public_cart', []);
-        $items = [];
-
-        $nombreListaPrecio = 'Precio Menor';
-        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
-            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
-        }
-
-        foreach ($cart as $key => $item) {
-            $variacion = Variacion::with(['producto.marca', 'producto.categoria', 'producto.descuentos', 'valores.atributo', 'precios.listaPrecio', 'inventarios'])
-                ->find($item['variacion_id']);
-
-            if (!$variacion) {
-                continue;
-            }
-
-            $stock = (int) $variacion->inventarios->sum('stock_base');
-            $basePrice = (float) ($variacion->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
-            
-            // Check active discount
-            $activeDiscount = $variacion->producto->descuentos
-                ->where('activo', true)
-                ->filter(fn($d) => (!$d->fecha_inicio || $d->fecha_inicio <= now()) && (!$d->fecha_fin || $d->fecha_fin >= now()))
-                ->first();
-
-            if ($activeDiscount) {
-                $pct = (int) $activeDiscount->porcentaje_descuento;
-                $finalPrice = round($basePrice * (1 - $pct / 100), 2);
-            } else {
-                $pct = 0;
-                $finalPrice = $basePrice;
-            }
-
-            $descAttr = $variacion->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(' | ');
-
-            $imagenUrl = $variacion->producto->getFirstMediaUrl('imagen_principal', 'thumb') 
-                ?: $variacion->producto->getFirstMediaUrl('imagen_principal')
-                ?: $variacion->producto->getFirstMediaUrl('galeria', 'thumb')
-                ?: $variacion->producto->getFirstMediaUrl('galeria');
-
-            $items[$key] = [
-                'key' => $key,
-                'producto_id' => $variacion->producto->id,
-                'slug' => \Illuminate\Support\Str::slug($variacion->producto->nombre),
-                'variacion_id' => $variacion->id,
-                'nombre' => $variacion->producto->nombre,
-                'marca' => $variacion->producto->marca->nombre,
-                'sku' => $variacion->sku,
-                'detalles' => $descAttr,
-                'imagen_url' => $imagenUrl,
-                'cantidad' => min($item['cantidad'], $stock),
-                'stock' => $stock,
-                'precio_base' => $basePrice,
-                'precio_final' => $finalPrice,
-                'porcentaje_descuento' => $pct,
-                'subtotal' => round($finalPrice * min($item['cantidad'], $stock), 2),
-            ];
-        }
-
-        return $items;
+        return \App\Services\CartService::getValidatedItems();
     }
 
     /**
@@ -106,44 +47,39 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
     /**
      * Update item quantity.
      */
-    public function updateQuantity(string $key, int $delta): void
+    public function updateQuantity(int $variacionId, int $delta): void
     {
-        $cart = session()->get('public_cart', []);
+        $items = $this->items;
+        $key = 'var_' . $variacionId;
 
-        if (!isset($cart[$key])) {
+        if (!isset($items[$key])) {
             return;
         }
 
-        $variacion = Variacion::with('inventarios')->find($cart[$key]['variacion_id']);
-        $stock = $variacion ? (int) $variacion->inventarios->sum('stock_base') : 0;
+        $currentQty = $items[$key]['cantidad'];
+        $newQty = $currentQty + $delta;
 
-        $newQty = $cart[$key]['cantidad'] + $delta;
-        $newQty = max(1, min($stock, $newQty));
-        $cart[$key]['cantidad'] = $newQty;
-
-        session()->put('public_cart', $cart);
+        \App\Services\CartService::updateQuantity($variacionId, $newQty);
         unset($this->items, $this->resumen);
     }
 
     /**
      * Remove item from cart.
      */
-    public function removeItem(string $key): void
+    public function removeItem(int $variacionId): void
     {
-        $cart = session()->get('public_cart', []);
-        unset($cart[$key]);
-        session()->put('public_cart', $cart);
+        \App\Services\CartService::remove($variacionId);
         unset($this->items, $this->resumen);
 
         Flux::toast(variant: 'success', text: __('Producto eliminado de la bolsa.'));
     }
 
     /**
-     * Clear all items from cart.
+     * Clear all items.
      */
-    public function vaciarCarrito(): void
+    public function clearCart(): void
     {
-        session()->forget('public_cart');
+        \App\Services\CartService::clear();
         unset($this->items, $this->resumen);
 
         Flux::toast(variant: 'success', text: __('Se ha vaciado tu bolsa de compras.'));
@@ -209,9 +145,9 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
                                 <!-- Selector de Cantidad -->
                                 <div class="flex items-center gap-3">
                                     <div class="flex items-center border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden bg-zinc-50 dark:bg-zinc-950 h-9">
-                                        <button wire:click.prevent="updateQuantity('{{ $item['key'] }}', -1)" class="px-2.5 text-zinc-500 hover:text-black dark:hover:text-white font-bold text-sm h-full transition-colors {{ $item['cantidad'] <= 1 ? 'opacity-40 cursor-not-allowed' : '' }}">−</button>
+                                        <button wire:click.prevent="updateQuantity({{ $item['variacion_id'] }}, -1)" class="px-2.5 text-zinc-500 hover:text-black dark:hover:text-white font-bold text-sm h-full transition-colors {{ $item['cantidad'] <= 1 ? 'opacity-40 cursor-not-allowed' : '' }}">−</button>
                                         <span class="w-8 text-center font-bold text-sm text-zinc-900 dark:text-white">{{ $item['cantidad'] }}</span>
-                                        <button wire:click.prevent="updateQuantity('{{ $item['key'] }}', 1)" class="px-2.5 text-zinc-500 hover:text-black dark:hover:text-white font-bold text-sm h-full transition-colors {{ $item['cantidad'] >= $item['stock'] ? 'opacity-40 cursor-not-allowed' : '' }}">+</button>
+                                        <button wire:click.prevent="updateQuantity({{ $item['variacion_id'] }}, 1)" class="px-2.5 text-zinc-500 hover:text-black dark:hover:text-white font-bold text-sm h-full transition-colors {{ $item['cantidad'] >= $item['stock'] ? 'opacity-40 cursor-not-allowed' : '' }}">+</button>
                                     </div>
                                     <span class="text-xxs text-zinc-400">{{ __('Máx') }} {{ $item['stock'] }} {{ __('uds.') }}</span>
                                 </div>
@@ -219,7 +155,7 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
                                 <!-- Subtotal y eliminar -->
                                 <div class="flex items-center gap-4">
                                     <span class="text-sm font-bold text-zinc-800 dark:text-zinc-200">S/ {{ number_format($item['subtotal'], 2) }}</span>
-                                    <flux:button variant="ghost" size="sm" icon="x-mark" wire:click.prevent="removeItem('{{ $item['key'] }}')" class="text-zinc-400 hover:text-rose-600" title="{{ __('Eliminar') }}" />
+                                    <flux:button variant="ghost" size="sm" icon="x-mark" wire:click.prevent="removeItem({{ $item['variacion_id'] }})" class="text-zinc-400 hover:text-rose-600" title="{{ __('Eliminar') }}" />
                                 </div>
                             </div>
                         </div>
@@ -228,7 +164,7 @@ new #[Title('Mi Bolsa de Compras'), Layout('layouts.publico')] class extends Com
 
                 <!-- Vaciar carrito -->
                 <div class="flex justify-end pt-2">
-                    <flux:button variant="ghost" size="sm" wire:click.prevent="vaciarCarrito" class="text-xs text-zinc-400 hover:text-rose-600">
+                    <flux:button variant="ghost" size="sm" wire:click.prevent="clearCart" class="text-xs text-zinc-400 hover:text-rose-600">
                         {{ __('Vaciar carrito') }}
                     </flux:button>
                 </div>

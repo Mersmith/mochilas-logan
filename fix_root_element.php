@@ -1,4 +1,5 @@
 <?php
+
 $files = [
     'tipos-documento/⚡index.blade.php',
     'series/⚡index.blade.php',
@@ -8,18 +9,18 @@ $files = [
     'categorias/⚡index.blade.php',
     'marcas/⚡index.blade.php',
     'atributos/⚡index.blade.php',
-    'unidades-medida/⚡index.blade.php'
+    'unidades-medida/⚡index.blade.php',
 ];
 
-$baseDir = __DIR__ . '/resources/views/pages/erp/';
+$baseDir = __DIR__.'/resources/views/pages/erp/';
 
 foreach ($files as $file) {
-    $path = $baseDir . $file;
-    if (!file_exists($path)) {
+    $path = $baseDir.$file;
+    if (! file_exists($path)) {
         continue;
     }
     $content = file_get_contents($path);
-    
+
     // Fix the extra closing div left after @endcan in the top header
     // It looks like:
     // @endcan
@@ -40,8 +41,7 @@ foreach ($files as $file) {
         $content,
         1
     );
-    
+
     file_put_contents($path, $content);
     echo "Fixed $file\n";
 }
-?>

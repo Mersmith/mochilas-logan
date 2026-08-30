@@ -2,15 +2,14 @@
 
 namespace App\Exports;
 
-use App\Models\Venta;
 use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class VentasExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
+class VentasExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping, WithStyles
 {
     protected $query;
 
@@ -33,20 +32,20 @@ class VentasExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSi
             'Fecha',
             'Método de Pago',
             'Total (S/)',
-            'Estado'
+            'Estado',
         ];
     }
 
     public function map($venta): array
     {
         return [
-            $venta->tipoDocumento->nombre . ' (' . $venta->serie . '-' . str_pad($venta->correlativo, 6, '0', STR_PAD_LEFT) . ')',
+            $venta->tipoDocumento->nombre.' ('.$venta->serie.'-'.str_pad($venta->correlativo, 6, '0', STR_PAD_LEFT).')',
             $venta->user->name ?? 'N/A',
             $venta->movimientosKardex->first()?->almacen?->nombre ?? '-',
             $venta->created_at->format('Y-m-d H:i:s'),
             ucfirst($venta->metodo_pago),
             number_format($venta->total, 2),
-            $venta->estado_pago === 'pagado' ? 'Completado' : 'Anulado'
+            $venta->estado_pago === 'pagado' ? 'Completado' : 'Anulado',
         ];
     }
 

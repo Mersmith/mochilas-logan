@@ -2,15 +2,14 @@
 
 namespace App\Exports;
 
-use App\Models\Kardex;
 use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class KardexExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize, WithStyles
+class KardexExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping, WithStyles
 {
     protected $query;
 
@@ -34,7 +33,7 @@ class KardexExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSi
             'Costo Unitario (S/)',
             'Costo Total Movimiento (S/)',
             'Stock Final',
-            'Valor Total Final (S/)'
+            'Valor Total Final (S/)',
         ];
     }
 
@@ -44,11 +43,11 @@ class KardexExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSi
             $movimiento->created_at->format('Y-m-d H:i:s'),
             $movimiento->concepto,
             $movimiento->tipo_transaccion,
-            ($movimiento->tipo_transaccion === 'Entrada' ? '+' : '-') . $movimiento->cantidad,
+            ($movimiento->tipo_transaccion === 'Entrada' ? '+' : '-').$movimiento->cantidad,
             number_format($movimiento->costo_unitario, 2),
             number_format($movimiento->costo_total, 2),
             $movimiento->stock_posterior,
-            number_format($movimiento->valor_total_almacen, 2)
+            number_format($movimiento->valor_total_almacen, 2),
         ];
     }
 

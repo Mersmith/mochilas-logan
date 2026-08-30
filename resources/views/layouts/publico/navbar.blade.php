@@ -19,7 +19,7 @@
     <div class="flex items-center gap-4">
         <!-- Bolsa de Compras -->
         @php
-            $cartCount = collect(session()->get('public_cart', []))->sum('cantidad');
+            $cartCount = \App\Services\CartService::count();
         @endphp
         <a href="{{ route('carrito') }}" wire:navigate class="relative mr-2 inline-block"
             title="{{ __('Bolsa de compras') }}">

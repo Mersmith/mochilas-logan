@@ -1,4 +1,5 @@
 <?php
+
 $files = [
     'tipos-documento/⚡index.blade.php',
     'series/⚡index.blade.php',
@@ -8,19 +9,20 @@ $files = [
     'categorias/⚡index.blade.php',
     'marcas/⚡index.blade.php',
     'atributos/⚡index.blade.php',
-    'unidades-medida/⚡index.blade.php'
+    'unidades-medida/⚡index.blade.php',
 ];
 
-$baseDir = __DIR__ . '/resources/views/pages/erp/';
+$baseDir = __DIR__.'/resources/views/pages/erp/';
 
 foreach ($files as $file) {
-    $path = $baseDir . $file;
-    if (!file_exists($path)) {
+    $path = $baseDir.$file;
+    if (! file_exists($path)) {
         echo "File not found: $file\n";
+
         continue;
     }
     $content = file_get_contents($path);
-    
+
     // 1. Remove Exportar dropdown from top header
     $content = preg_replace(
         '/<div class="flex flex-wrap items-center gap-2">\s*<flux:dropdown>.*?<\/flux:dropdown>\s*(@can\([\'"][^\'"]+?\.editar[\'"]\))/is',
@@ -84,7 +86,7 @@ HTML;
     // 4. Update empty state
     $content = preg_replace(
         '/(<td colspan="{{ auth\(\)->user\(\)->can\([\'"][^\'"]+?\.editar[\'"]\) \? \d+ : \d+ }}"\s*class="text-center )py-8 text-zinc-500(">\s*).*?<\/td>/is',
-        '$1py-12 text-zinc-400$2<div class="flex flex-col items-center gap-2">' . "\n" . '                                    <flux:icon.face-smile class="size-8 text-zinc-300" />' . "\n" . '                                    <span>{{ $search ? __(\'No se encontraron resultados para ":query"\', [\'query\' => $search]) : __(\'No hay registros.\') }}</span>' . "\n" . '                                </div>' . "\n" . '                            </td>',
+        '$1py-12 text-zinc-400$2<div class="flex flex-col items-center gap-2">'."\n".'                                    <flux:icon.face-smile class="size-8 text-zinc-300" />'."\n".'                                    <span>{{ $search ? __(\'No se encontraron resultados para ":query"\', [\'query\' => $search]) : __(\'No hay registros.\') }}</span>'."\n".'                                </div>'."\n".'                            </td>',
         $content,
         1
     );
@@ -96,8 +98,7 @@ HTML;
         $content,
         1
     );
-    
+
     file_put_contents($path, $content);
     echo "Updated $file\n";
 }
-?>

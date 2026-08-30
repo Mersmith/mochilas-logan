@@ -4,6 +4,7 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Models\ListaPrecio;
 use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
@@ -35,7 +36,7 @@ class CreateNewUser implements CreatesNewUsers
         $user->assignRole('cliente');
 
         // 2. Obtener o crear una lista de precios por defecto para evitar error de Foreign Key
-        $listaPrecio = \App\Models\ListaPrecio::firstOrCreate(['nombre' => 'Precio Menor']);
+        $listaPrecio = ListaPrecio::firstOrCreate(['nombre' => 'Precio Menor']);
 
         // 3. Crear su perfil en la tabla clientes
         $user->cliente()->create([

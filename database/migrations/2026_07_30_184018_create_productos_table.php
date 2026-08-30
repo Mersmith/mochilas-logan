@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -19,6 +18,8 @@ return new class extends Migration
             $table->string('nombre')->unique();
             $table->string('slug')->unique();
             $table->text('descripcion')->nullable();
+            $table->json('especificaciones')->nullable();
+            $table->text('politica_garantia')->nullable();
             $table->boolean('activo')->default(true);
 
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

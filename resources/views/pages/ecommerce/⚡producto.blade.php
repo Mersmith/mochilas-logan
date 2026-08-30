@@ -150,7 +150,7 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
     }
 
     /**
-     * Add selected variation to e-commerce session cart.
+     * Add selected variation to cart using CartService.
      */
     public function addToCart(): void
     {
@@ -160,62 +160,17 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
             return;
         }
 
-        // Check stock
-        $stock = (int) $variation->inventarios->sum('stock_base');
-        if ($stock <= 0) {
-            Flux::toast(variant: 'danger', text: __('Esta mochila no cuenta con stock disponible.'));
+        $result = \App\Services\CartService::add($variation->id, $this->quantity);
+
+        if (!$result['success']) {
+            Flux::toast(variant: 'danger', text: $result['message']);
             return;
         }
 
-        if ($this->quantity > $stock) {
-            Flux::toast(variant: 'danger', text: __('La cantidad solicitada supera el stock disponible.'));
-            return;
-        }
-
-        $nombreListaPrecio = 'Precio Menor';
-        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
-            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
-        }
-
-        // Calculate pricing
-        $basePrice = (float) ($variation->precios->firstWhere('listaPrecio.nombre', $nombreListaPrecio)?->precio ?? 0.00);
-        $activeDiscount = $this->producto->descuentos->first();
-        if ($activeDiscount) {
-            $pct = (int) $activeDiscount->porcentaje_descuento;
-            $finalPrice = round($basePrice * (1 - $pct / 100), 2);
-        } else {
-            $finalPrice = $basePrice;
-        }
-
-        // Get details
-        $descAttr = $variation->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(', ');
-
-        $cart = session()->get('public_cart', []);
+        Flux::toast(variant: 'success', text: $result['message']);
+        $this->dispatch('cart-updated');
         
-        $key = 'var_' . $variation->id;
-
-        if (isset($cart[$key])) {
-            $cart[$key]['cantidad'] += $this->quantity;
-            // Cap at stock
-            if ($cart[$key]['cantidad'] > $stock) {
-                $cart[$key]['cantidad'] = $stock;
-            }
-        } else {
-            $cart[$key] = [
-                'variacion_id' => $variation->id,
-                'nombre' => $this->producto->nombre,
-                'sku' => $variation->sku,
-                'detalles' => $descAttr,
-                'cantidad' => $this->quantity,
-                'precio' => $finalPrice,
-            ];
-        }
-
-        session()->put('public_cart', $cart);
-
-        Flux::toast(variant: 'success', text: __('¡Mochila agregada a tu bolsa de compras!'));
-        
-        // Redirect back to refresh cart count in layout
+        // Redirect to detail to refresh counts
         $this->redirect(route('producto.detalle', ['producto' => $this->producto->id, 'slug' => $this->slug]), navigate: true);
     }
 }; ?>
