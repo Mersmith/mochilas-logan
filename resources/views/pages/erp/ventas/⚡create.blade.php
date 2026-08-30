@@ -1,24 +1,33 @@
 <?php
 
-use App\Models\Venta;
-use App\Models\VentaDetalle;
 use App\Models\Almacen;
-use App\Models\User;
-use App\Models\TipoDocumento;
-use App\Models\Variacion;
-use App\Models\ProductoEmpaque;
+use App\Models\Cliente;
+use App\Models\Cupon;
 use App\Models\Inventario;
 use App\Models\Kardex;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use Livewire\Component;
-use Livewire\Attributes\Title;
-use Livewire\Attributes\Computed;
+use App\Models\ListaPrecio;
+use App\Models\ProductoEmpaque;
+use App\Models\Sede;
+use App\Models\Serie;
+use App\Models\TipoDocumento;
+use App\Models\UnidadMedida;
+use App\Models\User;
+use App\Models\Variacion;
+use App\Models\Venta;
+use App\Models\VentaDetalle;
 use Flux\Flux;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Title;
+use Livewire\Component;
 
 new #[Title('Registrar Venta')] class extends Component {
+    public ?int $sede_id = null;
     public ?int $almacen_id = null;
     public ?int $cliente_id = null;
+    public ?int $lista_precio_id = null;
     public ?int $tipo_documento_id = null;
     public string $serie = '';
     public int $correlativo = 1;
@@ -29,7 +38,7 @@ new #[Title('Registrar Venta')] class extends Component {
 
     // Carrito de Compra
     public array $cart = [];
-    
+
     // Filtro de catálogo izquierdo
     public string $searchProducto = '';
 
@@ -37,6 +46,263 @@ new #[Title('Registrar Venta')] class extends Component {
     public string $couponCode = '';
     public ?int $appliedCouponId = null;
     public float $couponDiscountAmount = 0.00;
+
+    // Modal Rápido de Cliente
+    public string $modal_tipo_persona = 'natural';
+    public string $modal_tipo_cliente = 'minorista';
+    public ?string $modal_dni = '';
+    public ?string $modal_ruc = '';
+    public string $modal_nombre = '';
+    public ?string $modal_email = '';
+    public ?string $modal_telefono = '';
+    public ?int $modal_lista_precio_id = null;
+
+    /**
+     * Mount the component.
+     */
+    public function mount(): void
+    {
+        $this->fecha_venta = now()->format('Y-m-d');
+
+        $primeraSede = Sede::where('activo', true)->first();
+        if ($primeraSede) {
+            $this->sede_id = $primeraSede->id;
+            $this->almacen_id = Almacen::where('sede_id', $primeraSede->id)->where('activo', true)->first()?->id;
+        }
+
+        $primeraLista = ListaPrecio::where('activo', true)->first();
+        if ($primeraLista) {
+            $this->lista_precio_id = $primeraLista->id;
+            $this->modal_lista_precio_id = $primeraLista->id;
+        }
+
+        $cliente = User::first();
+        if ($cliente) {
+            $this->cliente_id = $cliente->id;
+        }
+
+        $this->actualizarSeries();
+    }
+
+    /**
+     * Load next serial and correlative based on Sede and TipoDocumento.
+     */
+    public function actualizarSeries(): void
+    {
+        if (! $this->tipo_documento_id) {
+            $tipoDoc = TipoDocumento::where('codigo_sunat', '03')->where('activo', true)->first()
+                ?? TipoDocumento::where('activo', true)->first();
+            if ($tipoDoc) {
+                $this->tipo_documento_id = $tipoDoc->id;
+            }
+        }
+
+        if ($this->sede_id && $this->tipo_documento_id) {
+            $serie = Serie::where('sede_id', $this->sede_id)
+                ->where('tipo_documento_id', $this->tipo_documento_id)
+                ->where('activo', true)
+                ->first();
+
+            if ($serie) {
+                $this->serie = $serie->serie;
+                $this->correlativo = (int) $serie->correlativo;
+                return;
+            }
+        }
+
+        $this->serie = '';
+        $this->correlativo = 1;
+    }
+
+    public function updatedSedeId(): void
+    {
+        $this->almacen_id = $this->almacenes->first()?->id;
+        $this->cart = [];
+        $this->actualizarSeries();
+    }
+
+    public function updatedAlmacenId(): void
+    {
+        $this->cart = [];
+        $this->actualizarSeries();
+    }
+
+    public function updatedTipoDocumentoId(): void
+    {
+        $this->actualizarSeries();
+    }
+
+    public function updatedClienteId(): void
+    {
+        if (! $this->cliente_id) {
+            return;
+        }
+
+        $cliente = Cliente::where('user_id', $this->cliente_id)->first();
+        if ($cliente && $cliente->lista_precio_id) {
+            $this->lista_precio_id = $cliente->lista_precio_id;
+            $this->updatedListaPrecioId();
+            Flux::toast(variant: 'success', text: __('Tarifa actualizada automáticamente según el perfil del cliente.'));
+        }
+    }
+
+    public function updatedListaPrecioId(): void
+    {
+        foreach ($this->cart as $index => &$item) {
+            $item['lista_precio_id'] = $this->lista_precio_id;
+            $precioObj = collect($item['precios'])->firstWhere('lista_precio_id', $this->lista_precio_id)
+                ?? collect($item['precios'])->first();
+            $item['precio_unitario'] = $precioObj ? (float) $precioObj['precio'] : 0.00;
+            $item['subtotal'] = round($item['cantidad'] * $item['precio_unitario'], 2);
+            $item['total'] = $item['subtotal'];
+        }
+    }
+
+    /**
+     * Add a variation to the cart.
+     */
+    public function addToCart(int $variacionId): void
+    {
+        if (! $this->almacen_id) {
+            Flux::toast(variant: 'danger', text: __('Debe seleccionar un almacén origen.'));
+            return;
+        }
+
+        // Buscar stock disponible
+        $inv = Inventario::where('almacen_id', $this->almacen_id)
+            ->where('variacion_id', $variacionId)
+            ->first();
+
+        $stockDisponible = $inv ? $inv->stock_base : 0;
+
+        if ($stockDisponible <= 0) {
+            Flux::toast(variant: 'danger', text: __('Esta variación no cuenta con stock disponible en este almacén.'));
+            return;
+        }
+
+        // Evitar duplicados en el carrito
+        $cartIndex = collect($this->cart)->firstWhere('variacion_id', $variacionId);
+        if ($cartIndex !== null) {
+            Flux::toast(variant: 'warning', text: __('El producto ya está en el carrito.'));
+            return;
+        }
+
+        $var = Variacion::with(['producto', 'valores.atributo', 'precios.listaPrecio'])->findOrFail($variacionId);
+
+        // Unidad base
+        $unidadBase = UnidadMedida::where('nombre', 'like', '%UNIDAD%')
+            ->orWhereIn('abreviacion', ['UND', 'U', 'NIU'])
+            ->first() ?? UnidadMedida::first();
+
+        $baseId = $unidadBase?->id ?? 1;
+        $baseNombre = $unidadBase?->nombre ?? 'Unidad';
+
+        // Empaques del producto
+        $empaques = ProductoEmpaque::with('unidadMedida')
+            ->where('producto_id', $var->producto_id)
+            ->get()
+            ->map(function ($pe) {
+                return [
+                    'unidad_medida_id' => $pe->unidad_medida_id,
+                    'nombre' => $pe->unidadMedida->nombre,
+                    'factor' => $pe->factor_conversion,
+                ];
+            })->toArray();
+
+        // Agregar la presentación base al inicio
+        array_unshift($empaques, [
+            'unidad_medida_id' => $baseId,
+            'nombre' => $baseNombre,
+            'factor' => 1,
+        ]);
+
+        // Cargar todas las listas de precios disponibles
+        $preciosDisponibles = $var->precios->map(function ($vp) {
+            return [
+                'lista_precio_id' => $vp->lista_precio_id,
+                'nombre' => $vp->listaPrecio?->nombre ?? 'Precio',
+                'precio' => (float) $vp->precio,
+            ];
+        })->values()->toArray();
+
+        if (empty($preciosDisponibles)) {
+            $preciosDisponibles = [
+                ['lista_precio_id' => null, 'nombre' => 'General', 'precio' => 0.00],
+            ];
+        }
+
+        // Precio según la lista global seleccionada o la primera disponible
+        $precioSeleccionado = collect($preciosDisponibles)->firstWhere('lista_precio_id', $this->lista_precio_id)
+            ?? $preciosDisponibles[0];
+
+        $listaPrecioId = $precioSeleccionado['lista_precio_id'];
+        $precioUnitario = $precioSeleccionado['precio'];
+
+        $desc = $var->valores->map(fn ($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(', ');
+
+        $this->cart[] = [
+            'variacion_id' => $var->id,
+            'nombre' => $var->producto->nombre . ' (' . $desc . ')',
+            'sku' => $var->sku,
+            'unidad_medida_id' => $baseId,
+            'factor_conversion' => 1,
+            'empaques' => $empaques,
+            'precios' => $preciosDisponibles,
+            'lista_precio_id' => $listaPrecioId,
+            'cantidad' => 1,
+            'cantidad_base' => 1,
+            'precio_unitario' => $precioUnitario,
+            'subtotal' => $precioUnitario,
+            'total' => $precioUnitario,
+            'stock_disponible' => $stockDisponible,
+        ];
+    }
+
+    /**
+     * Remove item from cart.
+     */
+    public function removeFromCart(int $index): void
+    {
+        unset($this->cart[$index]);
+        $this->cart = array_values($this->cart);
+    }
+
+    /**
+     * Recalculate totals on row updates.
+     */
+    public function updatedCart($value, $name): void
+    {
+        if (preg_match('/^cart\.(\d+)\.(unidad_medida_id|cantidad|lista_precio_id|precio_unitario)$/', $name, $matches)) {
+            $index = (int) $matches[1];
+            $field = $matches[2];
+
+            $item = &$this->cart[$index];
+
+            if ($field === 'unidad_medida_id') {
+                $empaque = collect($item['empaques'])->firstWhere('unidad_medida_id', $item['unidad_medida_id']);
+                $item['factor_conversion'] = $empaque ? $empaque['factor'] : 1;
+            }
+
+            if ($field === 'lista_precio_id') {
+                $precioObj = collect($item['precios'])->firstWhere('lista_precio_id', $item['lista_precio_id']);
+                $item['precio_unitario'] = $precioObj ? (float) $precioObj['precio'] : 0.00;
+            }
+
+            $cantidad = (int) ($item['cantidad'] ?: 1);
+            $factor = (int) ($item['factor_conversion'] ?: 1);
+            $item['cantidad_base'] = $cantidad * $factor;
+
+            // Validar que no supere el stock disponible
+            if ($item['cantidad_base'] > $item['stock_disponible']) {
+                Flux::toast(variant: 'danger', text: __('La cantidad solicitada supera el stock físico disponible (' . $item['stock_disponible'] . ' uds.).'));
+                $item['cantidad'] = floor($item['stock_disponible'] / $factor) ?: 1;
+                $item['cantidad_base'] = $item['cantidad'] * $factor;
+            }
+
+            $item['subtotal'] = round($item['cantidad'] * $item['precio_unitario'], 2);
+            $item['total'] = $item['subtotal'];
+        }
+    }
 
     /**
      * Apply coupon discount.
@@ -48,11 +314,11 @@ new #[Title('Registrar Venta')] class extends Component {
             return;
         }
 
-        $cupon = \App\Models\Cupon::where('codigo', strtoupper($this->couponCode))
+        $cupon = Cupon::where('codigo', strtoupper($this->couponCode))
             ->where('activo', true)
             ->first();
 
-        if (!$cupon) {
+        if (! $cupon) {
             Flux::toast(variant: 'danger', text: __('El código de cupón ingresado no es válido o está inactivo.'));
             $this->cancelarCupon();
             return;
@@ -88,9 +354,6 @@ new #[Title('Registrar Venta')] class extends Component {
         Flux::toast(variant: 'success', text: __('Cupón aplicado. Descuento: S/ ' . number_format($this->couponDiscountAmount, 2)));
     }
 
-    /**
-     * Cancel coupon.
-     */
     public function cancelarCupon(): void
     {
         $this->appliedCouponId = null;
@@ -99,272 +362,121 @@ new #[Title('Registrar Venta')] class extends Component {
     }
 
     /**
-     * Mount the component.
+     * Modal rápido para nuevo cliente.
      */
-    public function mount(): void
+    public function abrirModalCliente(): void
     {
-        $this->fecha_venta = now()->format('Y-m-d');
-        
-        $almacen = Almacen::where('activo', true)->first();
-        if ($almacen) {
-            $this->almacen_id = $almacen->id;
-        }
-
-        $cliente = User::first();
-        if ($cliente) {
-            $this->cliente_id = $cliente->id;
-        }
-
-        $this->actualizarSeries();
+        $this->reset(['modal_dni', 'modal_ruc', 'modal_nombre', 'modal_email', 'modal_telefono']);
+        $this->modal_tipo_persona = 'natural';
+        $this->modal_tipo_cliente = 'minorista';
+        $this->modal_lista_precio_id = $this->lista_precio_id ?? ListaPrecio::first()?->id;
+        $this->modal('modal-nuevo-cliente')->show();
     }
 
-    /**
-     * Load next serial and correlative.
-     */
-    public function actualizarSeries(): void
+    public function guardarClienteRapido(): void
     {
-        if (!$this->tipo_documento_id) {
-            // Boleta por defecto (codigo_sunat = 03)
-            $tipoDoc = TipoDocumento::where('codigo_sunat', '03')->first();
-            if ($tipoDoc) {
-                $this->tipo_documento_id = $tipoDoc->id;
-            }
-        }
-
-        if ($this->tipo_documento_id && $this->almacen_id) {
-            $almacen = Almacen::find($this->almacen_id);
-            if ($almacen) {
-                $serie = DB::table('series')
-                    ->where('sede_id', $almacen->sede_id)
-                    ->where('tipo_documento_id', $this->tipo_documento_id)
-                    ->where('activo', true)
-                    ->first();
-                    
-                if ($serie) {
-                    $this->serie = $serie->serie;
-                    $this->correlativo = $serie->correlativo + 1;
-                    return;
-                }
-            }
-        }
-
-        // Serie por defecto en caso de no encontrarse configuración
-        $this->serie = 'F001';
-        $this->correlativo = 1;
-    }
-
-    public function updatedAlmacenId(): void
-    {
-        $this->actualizarSeries();
-        $this->cart = []; // Resetear carrito al cambiar almacén
-    }
-
-    public function updatedTipoDocumentoId(): void
-    {
-        $this->actualizarSeries();
-    }
-
-    /**
-     * Add a variation to the cart.
-     */
-    public function addToCart(int $variacionId): void
-    {
-        if (!$this->almacen_id) {
-            Flux::toast(variant: 'danger', text: __('Debe seleccionar un almacén origen.'));
-            return;
-        }
-
-        // Buscar stock disponible
-        $inv = Inventario::where('almacen_id', $this->almacen_id)
-            ->where('variacion_id', $variacionId)
-            ->first();
-
-        $stockDisponible = $inv ? $inv->stock_base : 0;
-
-        if ($stockDisponible <= 0) {
-            Flux::toast(variant: 'danger', text: __('Esta variación no cuenta con stock disponible en este almacén.'));
-            return;
-        }
-
-        // Evitar duplicados en el carrito
-        $cartIndex = collect($this->cart)->firstWhere('variacion_id', $variacionId);
-        if ($cartIndex !== null) {
-            Flux::toast(variant: 'warning', text: __('El producto ya está en el carrito.'));
-            return;
-        }
-
-        $var = Variacion::with(['producto', 'valores.atributo', 'precios.listaPrecio'])->findOrFail($variacionId);
-        
-        // Empaques del producto
-        $empaques = ProductoEmpaque::with('unidadMedida')
-            ->where('producto_id', $var->producto_id)
-            ->get()
-            ->map(function ($pe) {
-                return [
-                    'unidad_medida_id' => $pe->unidad_medida_id,
-                    'nombre' => $pe->unidadMedida->nombre,
-                    'factor' => $pe->factor_conversion,
-                ];
-            })->toArray();
-
-        // Agregar la presentación base "Unidad" por defecto
-        array_unshift($empaques, [
-            'unidad_medida_id' => 1, // Unidad
-            'nombre' => 'Unidad',
-            'factor' => 1
-        ]);
-
-        // Cargar precios de lista
-        $precioMenor = $var->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00;
-        $precioMayor = $var->precios->firstWhere('listaPrecio.nombre', 'Precio Mayor')?->precio ?? 0.00;
-
-        $desc = $var->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(', ');
-
-        $this->cart[] = [
-            'variacion_id' => $var->id,
-            'nombre' => $var->producto->nombre . ' (' . $desc . ')',
-            'sku' => $var->sku,
-            'unidad_medida_id' => 1, // Unidad por defecto
-            'factor_conversion' => 1,
-            'empaques' => $empaques,
-            'cantidad' => 1,
-            'cantidad_base' => 1,
-            'precio_menor' => $precioMenor,
-            'precio_mayor' => $precioMayor,
-            'precio_tipo' => 'menor', // menor o mayor
-            'precio_unitario' => $precioMenor,
-            'subtotal' => $precioMenor,
-            'total' => $precioMenor,
-            'stock_disponible' => $stockDisponible,
+        $rules = [
+            'modal_tipo_persona' => 'required|in:natural,juridica',
+            'modal_tipo_cliente' => 'required|in:minorista,mayorista,emprendedor',
+            'modal_nombre' => 'required|string|max:255',
+            'modal_email' => 'nullable|email|unique:users,email',
+            'modal_telefono' => 'nullable|string|max:20',
+            'modal_lista_precio_id' => 'required|exists:lista_precios,id',
         ];
-    }
 
-    /**
-     * Remove item from cart.
-     */
-    public function removeFromCart(int $index): void
-    {
-        unset($this->cart[$index]);
-        $this->cart = array_values($this->cart);
-    }
-
-    /**
-     * Recalculate totals on row updates.
-     */
-    public function updatedCart($value, $name): void
-    {
-        // El name tiene formato: "cart.INDEX.KEY"
-        if (preg_match('/^cart\.(\d+)\.(unidad_medida_id|cantidad|precio_tipo|precio_unitario)$/', $name, $matches)) {
-            $index = (int)$matches[1];
-            $field = $matches[2];
-
-            $item = &$this->cart[$index];
-
-            if ($field === 'unidad_medida_id') {
-                $empaque = collect($item['empaques'])->firstWhere('unidad_medida_id', $item['unidad_medida_id']);
-                $item['factor_conversion'] = $empaque ? $empaque['factor'] : 1;
-            }
-
-            if ($field === 'precio_tipo') {
-                $item['precio_unitario'] = $item['precio_tipo'] === 'menor' ? $item['precio_menor'] : $item['precio_mayor'];
-            }
-
-            $cantidad = (int)($item['cantidad'] ?: 1);
-            $factor = (int)($item['factor_conversion'] ?: 1);
-            $item['cantidad_base'] = $cantidad * $factor;
-
-            // Validar que no supere el stock disponible
-            if ($item['cantidad_base'] > $item['stock_disponible']) {
-                Flux::toast(variant: 'danger', text: __('La cantidad solicitada supera el stock físico disponible (' . $item['stock_disponible'] . ' uds.).'));
-                $item['cantidad'] = floor($item['stock_disponible'] / $factor) ?: 1;
-                $item['cantidad_base'] = $item['cantidad'] * $factor;
-            }
-
-            $precio = (float)($item['precio_unitario'] ?: 0);
-            $item['total'] = round($item['cantidad_base'] * $precio, 2);
-            $item['subtotal'] = round($item['total'] / 1.18, 2);
-        }
-    }
-
-    /**
-     * Computed totals of the entire shopping cart.
-     */
-    #[Computed]
-    public function totales(): array
-    {
-        $subtotalCar = collect($this->cart)->sum('total');
-
-        if ($this->appliedCouponId) {
-            $cupon = \App\Models\Cupon::find($this->appliedCouponId);
-            if ($cupon) {
-                if ($cupon->tipo_descuento === 'porcentaje') {
-                    $this->couponDiscountAmount = round($subtotalCar * ($cupon->valor_descuento / 100), 2);
-                } else {
-                    $this->couponDiscountAmount = round(min($cupon->valor_descuento, $subtotalCar), 2);
-                }
-            }
+        if ($this->modal_tipo_persona === 'natural') {
+            $rules['modal_dni'] = 'required|string|size:8|unique:clientes,dni';
+            $this->modal_ruc = null;
         } else {
-            $this->couponDiscountAmount = 0.00;
+            $rules['modal_ruc'] = 'required|string|size:11|unique:clientes,ruc';
+            $this->modal_dni = null;
         }
 
-        $total = max(0, $subtotalCar - $this->couponDiscountAmount);
-        $subtotal = round($total / 1.18, 2);
-        $impuesto = round($total - $subtotal, 2);
+        $this->validate($rules);
 
-        return [
-            'subtotal' => $subtotal,
-            'impuesto' => $impuesto,
-            'total' => $total,
-            'descuento' => $this->couponDiscountAmount,
-        ];
+        $emailFinal = $this->modal_email ?: ($this->modal_dni ? "dni_{$this->modal_dni}@mochilaslogan.local" : "ruc_{$this->modal_ruc}@mochilaslogan.local");
+
+        $newUser = DB::transaction(function () use ($emailFinal) {
+            $user = User::create([
+                'name' => $this->modal_nombre,
+                'email' => $emailFinal,
+                'password' => bcrypt(Str::random(12)),
+                'activo' => true,
+            ]);
+
+            $user->assignRole('cliente');
+
+            Cliente::create([
+                'user_id' => $user->id,
+                'tipo_persona' => $this->modal_tipo_persona,
+                'tipo_cliente' => $this->modal_tipo_cliente,
+                'lista_precio_id' => $this->modal_lista_precio_id,
+                'dni' => $this->modal_dni,
+                'ruc' => $this->modal_ruc,
+                'razon_social' => $this->modal_tipo_persona === 'juridica' ? $this->modal_nombre : null,
+                'telefono' => $this->modal_telefono,
+                'activo' => true,
+            ]);
+
+            return $user;
+        });
+
+        $this->cliente_id = $newUser->id;
+        $this->lista_precio_id = $this->modal_lista_precio_id;
+        $this->updatedListaPrecioId();
+
+        $this->modal('modal-nuevo-cliente')->close();
+        Flux::toast(variant: 'success', text: __('Cliente registrado y seleccionado para esta venta.'));
     }
 
     /**
-     * Save the sale.
+     * Store sale in database and decrease stock.
      */
     public function guardar(): void
     {
         $this->validate([
-            'almacen_id' => 'required|integer|exists:almacens,id',
-            'cliente_id' => 'required|integer|exists:users,id',
-            'tipo_documento_id' => 'required|integer|exists:tipo_documentos,id',
+            'sede_id' => 'required|exists:sedes,id',
+            'almacen_id' => 'required|exists:almacens,id',
+            'cliente_id' => 'required|exists:users,id',
+            'tipo_documento_id' => 'required|exists:tipo_documentos,id',
             'serie' => 'required|string|max:10',
             'correlativo' => 'required|integer|min:1',
-            'metodo_pago' => 'required|string',
+            'fecha_venta' => 'required|date',
+            'tipo_pago' => 'required|in:online,contraentrega',
+            'metodo_pago' => 'required|in:efectivo,tarjeta,transferencia,yape_plin',
+            'cart' => 'required|array|min:1',
+        ], [
+            'cart.min' => __('Debe agregar al menos un producto al carrito para registrar la venta.'),
         ]);
 
-        if (empty($this->cart)) {
-            Flux::toast(variant: 'danger', text: __('Debe agregar al menos un producto al carrito de compras.'));
-            return;
-        }
+        $subtotal = collect($this->cart)->sum('total');
+        $descuento = $this->couponDiscountAmount;
+        $total = max(0, $subtotal - $descuento);
 
-        DB::transaction(function () {
-            $tot = $this->totales;
-
-            // Registrar cabecera
+        DB::transaction(function () use ($subtotal, $descuento, $total) {
+            // Crear la Venta
             $venta = Venta::create([
                 'user_id' => $this->cliente_id,
                 'tipo_documento_id' => $this->tipo_documento_id,
                 'serie' => $this->serie,
                 'correlativo' => $this->correlativo,
-                'subtotal' => $tot['subtotal'],
-                'descuento' => $tot['descuento'],
-                'total' => $tot['total'],
-                'impuesto' => $tot['impuesto'],
                 'estado_pago' => 'pagado',
                 'estado_despacho' => 'entregado',
+                'subtotal' => $subtotal,
+                'descuento' => $descuento,
+                'costo_envio' => 0.00,
+                'total' => $total,
                 'tipo_pago' => $this->tipo_pago,
                 'metodo_pago' => $this->metodo_pago,
                 'cupon_id' => $this->appliedCouponId,
                 'comentarios' => $this->nota,
             ]);
 
-            // Decrementar usos del cupón si se aplicó
+            // Reducir usos restantes del cupón
             if ($this->appliedCouponId) {
-                \App\Models\Cupon::find($this->appliedCouponId)->decrement('usos_restantes');
+                Cupon::where('id', $this->appliedCouponId)->decrement('usos_restantes');
             }
 
-            // Registrar detalles, descontar stock e impactar Kardex
             foreach ($this->cart as $item) {
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
@@ -375,6 +487,7 @@ new #[Title('Registrar Venta')] class extends Component {
                     'cantidad_base' => $item['cantidad_base'],
                     'precio_unitario' => $item['precio_unitario'],
                     'subtotal' => $item['subtotal'],
+                    'descuento' => 0.00,
                     'total' => $item['total'],
                 ]);
 
@@ -382,6 +495,10 @@ new #[Title('Registrar Venta')] class extends Component {
                 $inv = Inventario::where('almacen_id', $this->almacen_id)
                     ->where('variacion_id', $item['variacion_id'])
                     ->first();
+
+                if (! $inv || $inv->stock_base < $item['cantidad_base']) {
+                    throw new \Exception("Stock insuficiente para el producto {$item['nombre']} en el almacén.");
+                }
 
                 $stockAnterior = $inv->stock_base;
                 $inv->decrement('stock_base', $item['cantidad_base']);
@@ -392,7 +509,7 @@ new #[Title('Registrar Venta')] class extends Component {
                     'almacen_id' => $this->almacen_id,
                     'variacion_id' => $item['variacion_id'],
                     'tipo_transaccion' => 'Salida',
-                    'concepto' => 'Venta ' . $this->serie . '-' . str_pad($this->correlativo, 6, '0', STR_PAD_LEFT),
+                    'concepto' => 'Venta ' . $this->serie . '-' . str_pad((string) $this->correlativo, 6, '0', STR_PAD_LEFT),
                     'cantidad' => $item['cantidad_base'],
                     'stock_anterior' => $stockAnterior,
                     'stock_posterior' => $stockPosterior,
@@ -406,37 +523,57 @@ new #[Title('Registrar Venta')] class extends Component {
             }
 
             // Incrementar correlativo de serie
-            DB::table('series')
-                ->where('sede_id', Almacen::find($this->almacen_id)->sede_id)
-                ->where('tipo_documento_id', $this->tipo_documento_id)
-                ->where('serie', $this->serie)
-                ->increment('correlativo');
+            if ($this->sede_id && $this->tipo_documento_id && $this->serie) {
+                $serieModel = Serie::where('sede_id', $this->sede_id)
+                    ->where('tipo_documento_id', $this->tipo_documento_id)
+                    ->where('serie', $this->serie)
+                    ->first();
+
+                if ($serieModel && $this->correlativo >= $serieModel->correlativo) {
+                    $serieModel->update(['correlativo' => $this->correlativo + 1]);
+                }
+            }
         });
 
         Flux::toast(variant: 'success', text: __('Venta registrada y stock descontado del almacén.'));
         $this->redirect(route('admin.ventas.index'), navigate: true);
     }
 
-    /**
-     * Computed options.
-     */
+    #[Computed]
+    public function sedes()
+    {
+        return Sede::where('activo', true)->orderBy('nombre')->get();
+    }
+
     #[Computed]
     public function almacenes()
     {
-        return Almacen::where('activo', true)->get();
+        if (! $this->sede_id) {
+            return collect();
+        }
+
+        return Almacen::where('sede_id', $this->sede_id)
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get();
+    }
+
+    #[Computed]
+    public function listasPrecios()
+    {
+        return ListaPrecio::where('activo', true)->orderBy('nombre')->get();
     }
 
     #[Computed]
     public function clientes()
     {
-        return User::all();
+        return User::where('activo', true)->orderBy('name')->get();
     }
 
     #[Computed]
     public function tipoDocumentos()
     {
-        // Boleta, Factura, Nota de Venta (codigo_sunat = 01, 03, 00)
-        return TipoDocumento::whereIn('codigo_sunat', ['01', '03', '00'])->get();
+        return TipoDocumento::where('activo', true)->orderBy('nombre')->get();
     }
 
     /**
@@ -445,32 +582,34 @@ new #[Title('Registrar Venta')] class extends Component {
     #[Computed]
     public function catalogo()
     {
-        if (!$this->almacen_id) {
+        if (! $this->almacen_id) {
             return collect();
         }
 
-        return Variacion::with(['producto', 'valores.atributo', 'precios', 'inventarios' => function($query) {
+        return Variacion::with(['producto', 'valores.atributo', 'precios.listaPrecio', 'inventarios' => function ($query) {
             $query->where('almacen_id', $this->almacen_id);
         }])
-        ->whereHas('producto', function ($q) {
-            $q->where('nombre', 'like', '%' . $this->searchProducto . '%')
-              ->orWhere('sku', 'like', '%' . $this->searchProducto . '%');
-        })
-        ->where('activo', true)
-        ->get();
+            ->whereHas('producto', function ($q) {
+                $q->where('nombre', 'like', '%' . $this->searchProducto . '%')
+                    ->orWhere('sku', 'like', '%' . $this->searchProducto . '%');
+            })
+            ->where('activo', true)
+            ->get();
     }
 }; ?>
 
 <div class="space-y-6">
     <div>
         <flux:heading size="xl">{{ __('Registrar Nueva Venta (POS)') }}</flux:heading>
-        <flux:subheading>{{ __('Selecciona productos del almacén e ingresa los datos del cliente para facturar.') }}</flux:subheading>
+        <flux:subheading>{{ __('Selecciona la Sede, la Tarifa de precios y el Cliente para cotizar y facturar.') }}</flux:subheading>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Panel Izquierdo: Catálogo de Productos y SKUs en Almacén -->
         <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm h-fit">
-            <flux:heading size="lg">{{ __('Catálogo del Almacén') }}</flux:heading>
+            <div class="flex items-center justify-between">
+                <flux:heading size="lg">{{ __('Catálogo del Almacén') }}</flux:heading>
+            </div>
             
             <!-- Buscador Catálogo -->
             <flux:input wire:model.live="searchProducto" placeholder="Buscar por SKU o descripción..." icon="magnifying-glass" />
@@ -481,14 +620,17 @@ new #[Title('Registrar Venta')] class extends Component {
                     @php
                         $desc = $var->valores->map(fn($v) => $v->atributo->nombre . ': ' . $v->valor)->implode(', ');
                         $stock = $var->inventarios->firstWhere('almacen_id', $almacen_id)?->stock_base ?? 0;
-                        $precioMenor = $var->precios->firstWhere('listaPrecio.nombre', 'Precio Menor')?->precio ?? 0.00;
+                        
+                        // Buscar precio según la lista global seleccionada o el primer precio
+                        $precioObj = $var->precios->firstWhere('lista_precio_id', $lista_precio_id) ?? $var->precios->first();
+                        $precioMostrar = $precioObj?->precio ?? 0.00;
                     @endphp
                     <div class="py-3 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
                         <div class="space-y-0.5">
                             <div class="font-semibold text-zinc-900 dark:text-white text-xs">{{ $var->producto->nombre }}</div>
                             <div class="text-xxs text-zinc-500">{{ $desc }} (SKU: {{ $var->sku }})</div>
                             <div class="flex items-center gap-3 mt-1 text-xxs">
-                                <span class="font-bold text-zinc-900 dark:text-zinc-300">S/ {{ number_format($precioMenor, 2) }}</span>
+                                <span class="font-bold text-zinc-900 dark:text-zinc-300">S/ {{ number_format($precioMostrar, 2) }}</span>
                                 <span class="text-zinc-500">|</span>
                                 <span class="font-medium {{ $stock > 0 ? 'text-emerald-600' : 'text-rose-600' }}">{{ __('Stock: ') }}{{ $stock }}</span>
                             </div>
@@ -516,49 +658,116 @@ new #[Title('Registrar Venta')] class extends Component {
                     <flux:heading size="lg">{{ __('Datos de Facturación') }}</flux:heading>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Sede -->
+                        <flux:field>
+                            <flux:label>{{ __('Sede') }}</flux:label>
+                            <flux:select wire:model.live="sede_id">
+                                <option value="">{{ __('Seleccione Sede...') }}</option>
+                                @foreach($this->sedes as $s)
+                                    <option value="{{ $s->id }}">{{ $s->nombre }}</option>
+                                @endforeach
+                            </flux:select>
+                            <flux:error name="sede_id" />
+                        </flux:field>
+
                         <!-- Almacén Origen -->
-                        <flux:select wire:model.live="almacen_id" :label="__('Almacén Origen')">
-                            @foreach($this->almacenes as $alm)
-                                <flux:select.option value="{{ $alm->id }}">{{ $alm->nombre }}</flux:select.option>
-                            @endforeach
-                        </flux:select>
+                        <flux:field>
+                            <flux:label>{{ __('Almacén Origen') }}</flux:label>
+                            <flux:select wire:model.live="almacen_id" :disabled="!$sede_id">
+                                <option value="">{{ __('Seleccione Almacén...') }}</option>
+                                @foreach($this->almacenes as $alm)
+                                    <option value="{{ $alm->id }}">{{ $alm->nombre }}</option>
+                                @endforeach
+                            </flux:select>
+                            <flux:error name="almacen_id" />
+                        </flux:field>
 
-                        <!-- Tipo de Pago -->
-                        <flux:select wire:model="tipo_pago" :label="__('Tipo de Pago')">
-                            <flux:select.option value="online">{{ __('Online') }}</flux:select.option>
-                            <flux:select.option value="contraentrega">{{ __('Contraentrega') }}</flux:select.option>
-                        </flux:select>
-
-                        <!-- Método de Pago -->
-                        <flux:select wire:model="metodo_pago" :label="__('Método de Pago')">
-                            <flux:select.option value="efectivo">{{ __('Efectivo') }}</flux:select.option>
-                            <flux:select.option value="tarjeta">{{ __('Tarjeta de Crédito/Débito') }}</flux:select.option>
-                            <flux:select.option value="transferencia">{{ __('Transferencia Bancaria') }}</flux:select.option>
-                            <flux:select.option value="yape_plin">{{ __('Yape / Plin') }}</flux:select.option>
-                        </flux:select>
+                        <!-- Tarifa / Lista de Precios Global -->
+                        <flux:field>
+                            <flux:label>{{ __('Tarifa de Precios') }}</flux:label>
+                            <flux:select wire:model.live="lista_precio_id">
+                                @foreach($this->listasPrecios as $lp)
+                                    <option value="{{ $lp->id }}">{{ $lp->nombre }}</option>
+                                @endforeach
+                            </flux:select>
+                            <flux:error name="lista_precio_id" />
+                        </flux:field>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <!-- Cliente -->
-                        <flux:select wire:model="cliente_id" :label="__('Cliente')" placeholder="Seleccionar Cliente...">
-                            @foreach($this->clientes as $cli)
-                                <flux:select.option value="{{ $cli->id }}">{{ $cli->name }}</flux:select.option>
-                            @endforeach
-                        </flux:select>
-
-                        <!-- Comprobante -->
-                        <flux:select wire:model.live="tipo_documento_id" :label="__('Comprobante')">
-                            @foreach($this->tipoDocumentos as $td)
-                                <flux:select.option value="{{ $td->id }}">{{ $td->nombre }}</flux:select.option>
-                            @endforeach
-                        </flux:select>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <!-- Serie -->
-                            <flux:input wire:model="serie" :label="__('Serie')" placeholder="F001" readonly />
-                            <!-- Correlativo -->
-                            <flux:input wire:model="correlativo" :label="__('Correlativo')" readonly />
+                        <!-- Cliente con Botón de Creación Rápida -->
+                        <div class="md:col-span-1">
+                            <flux:label class="mb-1.5">{{ __('Cliente') }}</flux:label>
+                            <div class="flex gap-2">
+                                <flux:select wire:model.live="cliente_id" class="flex-1">
+                                    <option value="">{{ __('Seleccionar Cliente...') }}</option>
+                                    @foreach($this->clientes as $cli)
+                                        <option value="{{ $cli->id }}">{{ $cli->name }}</option>
+                                    @endforeach
+                                </flux:select>
+                                <flux:button icon="plus" variant="primary" wire:click="abrirModalCliente" title="{{ __('Registrar nuevo cliente') }}" />
+                            </div>
+                            <flux:error name="cliente_id" />
                         </div>
+
+                        <!-- Tipo y Método de Pago -->
+                        <flux:field>
+                            <flux:label>{{ __('Tipo de Pago') }}</flux:label>
+                            <flux:select wire:model="tipo_pago">
+                                <option value="online">{{ __('Online') }}</option>
+                                <option value="contraentrega">{{ __('Contraentrega') }}</option>
+                            </flux:select>
+                            <flux:error name="tipo_pago" />
+                        </flux:field>
+
+                        <flux:field>
+                            <flux:label>{{ __('Método de Pago') }}</flux:label>
+                            <flux:select wire:model="metodo_pago">
+                                <option value="efectivo">{{ __('Efectivo') }}</option>
+                                <option value="tarjeta">{{ __('Tarjeta de Crédito/Débito') }}</option>
+                                <option value="transferencia">{{ __('Transferencia Bancaria') }}</option>
+                                <option value="yape_plin">{{ __('Yape / Plin') }}</option>
+                            </flux:select>
+                            <flux:error name="metodo_pago" />
+                        </flux:field>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Comprobante -->
+                        <flux:field>
+                            <flux:label>{{ __('Comprobante') }}</flux:label>
+                            <flux:select wire:model.live="tipo_documento_id">
+                                <option value="">{{ __('Seleccione Comprobante...') }}</option>
+                                @foreach($this->tipoDocumentos as $td)
+                                    <option value="{{ $td->id }}">{{ $td->nombre }}</option>
+                                @endforeach
+                            </flux:select>
+                            <flux:error name="tipo_documento_id" />
+                        </flux:field>
+
+                        <div class="grid grid-cols-2 gap-4 md:col-span-2">
+                            <!-- Serie -->
+                            <flux:field>
+                                <flux:label>{{ __('Serie') }}</flux:label>
+                                <flux:input wire:model="serie" placeholder="Ej. F001" required />
+                                <flux:error name="serie" />
+                            </flux:field>
+
+                            <!-- Correlativo -->
+                            <flux:field>
+                                <flux:label>{{ __('Correlativo') }}</flux:label>
+                                <flux:input type="number" wire:model="correlativo" placeholder="Ej. 1" required />
+                                <flux:error name="correlativo" />
+                            </flux:field>
+                        </div>
+
+                        @if(empty($serie) && $sede_id && $tipo_documento_id)
+                            <div class="md:col-span-3 -mt-3">
+                                <span class="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                    ⚠️ {{ __('La sede seleccionada no tiene una serie activa registrada para este tipo de comprobante.') }}
+                                </span>
+                            </div>
+                        @endif
                     </div>
                 </div>
 
@@ -568,113 +777,214 @@ new #[Title('Registrar Venta')] class extends Component {
 
                     @if(empty($cart))
                         <div class="text-center py-12 text-zinc-500 text-sm">
-                            {{ __('El carrito de compras está vacío. Agrega productos desde el catálogo izquierdo.') }}
+                            <flux:icon.shopping-cart class="size-8 mx-auto mb-2 text-zinc-400" />
+                            {{ __('El carrito de compras está vacío. Agrega productos desde el catálogo.') }}
                         </div>
                     @else
                         <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse text-xs">
+                            <table class="w-full text-left text-xs">
                                 <thead>
-                                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-medium">
-                                        <th class="pb-3 w-1/3">{{ __('Producto / SKU') }}</th>
-                                        <th class="pb-3 w-1/4 text-center">{{ __('Presentación') }}</th>
-                                        <th class="pb-3 w-12 text-center">{{ __('Cant.') }}</th>
-                                        <th class="pb-3 w-20 text-center">{{ __('Tarifa') }}</th>
-                                        <th class="pb-3 w-20 text-right">{{ __('Precio Unit.') }}</th>
-                                        <th class="pb-3 w-20 text-right">{{ __('Total') }}</th>
-                                        <th class="pb-3 w-8"></th>
+                                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 font-semibold">
+                                        <th class="pb-2">{{ __('Producto / SKU') }}</th>
+                                        <th class="pb-2">{{ __('Presentación') }}</th>
+                                        <th class="pb-2">{{ __('Lista de Precio') }}</th>
+                                        <th class="pb-2">{{ __('Cant.') }}</th>
+                                        <th class="pb-2">{{ __('Total Base') }}</th>
+                                        <th class="pb-2">{{ __('P. Unit.') }}</th>
+                                        <th class="pb-2">{{ __('Total') }}</th>
+                                        <th class="pb-2 text-center">{{ __('Acción') }}</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
                                     @foreach($cart as $index => $item)
-                                        <tr class="align-top py-2">
+                                        <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
                                             <td class="py-3 pr-2">
                                                 <div class="font-medium text-zinc-900 dark:text-white">{{ $item['nombre'] }}</div>
-                                                <div class="text-xxs text-zinc-500">SKU: {{ $item['sku'] }} (Stock: {{ $item['stock_disponible'] }})</div>
+                                                <div class="text-xxs text-zinc-500 font-mono">{{ $item['sku'] }}</div>
                                             </td>
 
                                             <td class="py-3 pr-2">
-                                                <flux:select wire:model.live="cart.{{ $index }}.unidad_medida_id">
+                                                <select wire:model.live="cart.{{ $index }}.unidad_medida_id" class="text-xs py-1 px-2 border rounded-md dark:bg-zinc-800 dark:border-zinc-700">
                                                     @foreach($item['empaques'] as $emp)
-                                                        <flux:select.option value="{{ $emp['unidad_medida_id'] }}">{{ $emp['nombre'] }} (x{{ $emp['factor'] }})</flux:select.option>
+                                                        <option value="{{ $emp['unidad_medida_id'] }}">{{ $emp['nombre'] }} (x{{ $emp['factor'] }})</option>
                                                     @endforeach
-                                                </flux:select>
+                                                </select>
                                             </td>
 
                                             <td class="py-3 pr-2">
-                                                <flux:input wire:model.live="cart.{{ $index }}.cantidad" type="number" min="1" class="text-center" />
+                                                <select wire:model.live="cart.{{ $index }}.lista_precio_id" class="text-xs py-1 px-2 border rounded-md dark:bg-zinc-800 dark:border-zinc-700">
+                                                    @foreach($item['precios'] as $pr)
+                                                        <option value="{{ $pr['lista_precio_id'] }}">{{ $pr['nombre'] }} (S/ {{ number_format($pr['precio'], 2) }})</option>
+                                                    @endforeach
+                                                </select>
                                             </td>
 
-                                            <td class="py-3 pr-2">
-                                                <flux:select wire:model.live="cart.{{ $index }}.precio_tipo">
-                                                    <flux:select.option value="menor">{{ __('Precio Menor') }}</flux:select.option>
-                                                    <flux:select.option value="mayor">{{ __('Precio Mayor') }}</flux:select.option>
-                                                </flux:select>
+                                            <td class="py-3 pr-2 w-20">
+                                                <input type="number" min="1" wire:model.live.debounce.300ms="cart.{{ $index }}.cantidad" class="w-16 text-xs py-1 px-2 border rounded-md dark:bg-zinc-800 dark:border-zinc-700 text-center" />
                                             </td>
 
-                                            <td class="py-3 pr-2">
-                                                <flux:input wire:model.live="cart.{{ $index }}.precio_unitario" type="number" step="0.01" class="text-right" />
+                                            <td class="py-3 pr-2 text-zinc-500 font-medium">
+                                                {{ $item['cantidad_base'] }} uds.
                                             </td>
 
-                                            <td class="py-3 pr-2 text-right align-middle font-semibold text-zinc-900 dark:text-white">
+                                            <td class="py-3 pr-2 font-semibold text-zinc-800 dark:text-zinc-200">
+                                                S/ {{ number_format($item['precio_unitario'], 2) }}
+                                            </td>
+
+                                            <td class="py-3 pr-2 font-bold text-zinc-900 dark:text-white">
                                                 S/ {{ number_format($item['total'], 2) }}
                                             </td>
 
-                                            <td class="py-3 text-right align-middle">
-                                                <flux:button variant="ghost" icon="trash" size="sm" wire:click.prevent="removeFromCart({{ $index }})" />
+                                            <td class="py-3 text-center">
+                                                <flux:button variant="ghost" icon="trash" size="xs" wire:click.prevent="removeFromCart({{ $index }})" class="text-rose-600 hover:text-rose-700" />
                                             </td>
                                         </tr>
                                     @endforeach
                                 </tbody>
                             </table>
                         </div>
-
-                        <!-- Aplicar Cupón -->
-                        <div class="flex items-center gap-4 border-t border-zinc-200 dark:border-zinc-700 pt-4 mt-4 justify-end w-full">
-                            <div class="w-64">
-                                <flux:input wire:model="couponCode" placeholder="Ingresar cupón de descuento..." :disabled="(bool)$appliedCouponId" />
-                            </div>
-                            @if(!$appliedCouponId)
-                                <flux:button variant="ghost" wire:click.prevent="aplicarCupon">{{ __('Aplicar Cupón') }}</flux:button>
-                            @else
-                                <flux:button variant="ghost" color="rose" wire:click.prevent="cancelarCupon">{{ __('Quitar Cupón') }}</flux:button>
-                            @endif
-                        </div>
-
-                        <!-- Totales Checkout -->
-                        <div class="flex flex-col items-end gap-1.5 border-t border-zinc-200 dark:border-zinc-700 pt-4 text-xs text-zinc-600 dark:text-zinc-400 w-full">
-                            <div class="flex justify-between w-48">
-                                <span>Subtotal:</span>
-                                <span>S/ {{ number_format($this->totales['subtotal'], 2) }}</span>
-                            </div>
-                            @if($this->totales['descuento'] > 0)
-                                <div class="flex justify-between w-48 text-emerald-600 font-semibold">
-                                    <span>Descuento:</span>
-                                    <span>- S/ {{ number_format($this->totales['descuento'], 2) }}</span>
-                                </div>
-                            @endif
-                            <div class="flex justify-between w-48">
-                                <span>IGV (18%):</span>
-                                <span>S/ {{ number_format($this->totales['impuesto'], 2) }}</span>
-                            </div>
-                            <div class="flex justify-between w-48 text-base font-bold text-zinc-900 dark:text-white border-t border-zinc-100 dark:border-zinc-800 pt-2">
-                                <span>Total:</span>
-                                <span>S/ {{ number_format($this->totales['total'], 2) }}</span>
-                            </div>
-                        </div>
                     @endif
                 </div>
 
-                <!-- Botones de Acción -->
-                <div class="flex items-center justify-end gap-4">
-                    <flux:button variant="ghost" :href="route('admin.ventas.index')" wire:navigate>
-                        {{ __('Cancelar') }}
-                    </flux:button>
-                    
-                    <flux:button variant="primary" type="submit" :disabled="empty($cart)">
-                        {{ __('Registrar y Cobrar Venta') }}
-                    </flux:button>
+                <!-- Tarjeta Resumen y Cupones -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Cupones y Notas -->
+                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm h-fit">
+                        <flux:heading size="lg">{{ __('Cupón de Descuento') }}</flux:heading>
+
+                        <div class="flex gap-2">
+                            <flux:input wire:model="couponCode" placeholder="Ej. VERANO2026" class="uppercase" />
+                            @if($appliedCouponId)
+                                <flux:button variant="danger" wire:click.prevent="cancelarCupon">{{ __('Quitar') }}</flux:button>
+                            @else
+                                <flux:button variant="primary" wire:click.prevent="aplicarCupon">{{ __('Aplicar') }}</flux:button>
+                            @endif
+                        </div>
+
+                        <flux:field>
+                            <flux:label>{{ __('Nota de Venta / Observación') }}</flux:label>
+                            <flux:textarea wire:model="nota" rows="2" placeholder="Opcional..." />
+                        </flux:field>
+                    </div>
+
+                    <!-- Totales y Acción Final -->
+                    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 space-y-4 shadow-sm flex flex-col justify-between">
+                        <flux:heading size="lg">{{ __('Resumen de Totales') }}</flux:heading>
+
+                        @php
+                            $subtotal = collect($cart)->sum('total');
+                            $total = max(0, $subtotal - $couponDiscountAmount);
+                        @endphp
+
+                        <div class="space-y-2 border-t border-b border-zinc-200 dark:border-zinc-800 py-3 text-sm">
+                            <div class="flex justify-between text-zinc-600 dark:text-zinc-400">
+                                <span>{{ __('Subtotal') }}</span>
+                                <span class="font-medium text-zinc-900 dark:text-white">S/ {{ number_format($subtotal, 2) }}</span>
+                            </div>
+
+                            @if($couponDiscountAmount > 0)
+                                <div class="flex justify-between text-emerald-600 font-medium">
+                                    <span>{{ __('Descuento Cupón') }}</span>
+                                    <span>- S/ {{ number_format($couponDiscountAmount, 2) }}</span>
+                                </div>
+                            @endif
+
+                            <div class="flex justify-between text-base font-bold text-zinc-900 dark:text-white pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                                <span>{{ __('Total a Pagar') }}</span>
+                                <span class="text-xl font-black text-emerald-600">S/ {{ number_format($total, 2) }}</span>
+                            </div>
+                        </div>
+
+                        <div class="pt-2">
+                            <flux:button variant="primary" type="submit" class="w-full !py-2.5 !text-base" :disabled="empty($cart)">
+                                {{ __('Completar Venta y Cobrar') }}
+                            </flux:button>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- Modal Registro Rápido de Cliente -->
+    <flux:modal name="modal-nuevo-cliente" class="md:w-96 space-y-6">
+        <div>
+            <flux:heading size="lg">{{ __('Nuevo Cliente Rápido') }}</flux:heading>
+            <flux:subheading>{{ __('Ingresa los datos para registrar y seleccionar al cliente de inmediato.') }}</flux:subheading>
+        </div>
+
+        <form wire:submit.prevent="guardarClienteRapido" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <flux:field>
+                    <flux:label>{{ __('Tipo de Persona') }}</flux:label>
+                    <flux:select wire:model.live="modal_tipo_persona">
+                        <option value="natural">{{ __('Persona Natural') }}</option>
+                        <option value="juridica">{{ __('Persona Jurídica') }}</option>
+                    </flux:select>
+                </flux:field>
+
+                <flux:field>
+                    <flux:label>{{ __('Tipo Cliente') }}</flux:label>
+                    <flux:select wire:model="modal_tipo_cliente">
+                        <option value="minorista">{{ __('Minorista') }}</option>
+                        <option value="mayorista">{{ __('Mayorista') }}</option>
+                        <option value="emprendedor">{{ __('Emprendedor') }}</option>
+                    </flux:select>
+                </flux:field>
+            </div>
+
+            @if($modal_tipo_persona === 'natural')
+                <flux:field>
+                    <flux:label>{{ __('DNI (8 dígitos)') }}</flux:label>
+                    <flux:input wire:model="modal_dni" maxlength="8" placeholder="12345678" required />
+                    <flux:error name="modal_dni" />
+                </flux:field>
+            @else
+                <flux:field>
+                    <flux:label>{{ __('RUC (11 dígitos)') }}</flux:label>
+                    <flux:input wire:model="modal_ruc" maxlength="11" placeholder="20123456789" required />
+                    <flux:error name="modal_ruc" />
+                </flux:field>
+            @endif
+
+            <flux:field>
+                <flux:label>{{ $modal_tipo_persona === 'natural' ? __('Nombre Completo') : __('Razón Social') }}</flux:label>
+                <flux:input wire:model="modal_nombre" placeholder="Ej. Juan Pérez / Inversiones SAC" required />
+                <flux:error name="modal_nombre" />
+            </flux:field>
+
+            <div class="grid grid-cols-2 gap-3">
+                <flux:field>
+                    <flux:label>{{ __('Teléfono') }}</flux:label>
+                    <flux:input wire:model="modal_telefono" placeholder="999888777" />
+                    <flux:error name="modal_telefono" />
+                </flux:field>
+
+                <flux:field>
+                    <flux:label>{{ __('Tarifa Asignada') }}</flux:label>
+                    <flux:select wire:model="modal_lista_precio_id">
+                        @foreach($this->listasPrecios as $lp)
+                            <option value="{{ $lp->id }}">{{ $lp->nombre }}</option>
+                        @endforeach
+                    </flux:select>
+                    <flux:error name="modal_lista_precio_id" />
+                </flux:field>
+            </div>
+
+            <flux:field>
+                <flux:label>{{ __('Correo Electrónico (Opcional)') }}</flux:label>
+                <flux:input type="email" wire:model="modal_email" placeholder="cliente@ejemplo.com" />
+                <flux:error name="modal_email" />
+            </flux:field>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <flux:button variant="ghost" type="button" x-on:click="$dispatch('close-modal', 'modal-nuevo-cliente')">
+                    {{ __('Cancelar') }}
+                </flux:button>
+                <flux:button variant="primary" type="submit">
+                    {{ __('Guardar y Seleccionar') }}
+                </flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

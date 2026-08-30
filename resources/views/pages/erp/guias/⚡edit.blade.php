@@ -125,15 +125,19 @@ new #[Title('Editar Guía de Inventario')] class extends Component {
         if ($this->detalle_variacion_id) {
             $variacion = Variacion::with('producto.empaques.unidadMedida')->find($this->detalle_variacion_id);
 
-            // Siempre incluimos la unidad base por defecto (ej. UND)
-            $unidades = collect([UnidadMedida::where('abreviacion', 'UND')->first() ?? UnidadMedida::first()]);
+            // Siempre incluimos la unidad base por defecto (ej. UNIDAD / U / UND / NIU)
+            $unidadBase = UnidadMedida::where('nombre', 'like', '%UNIDAD%')
+                ->orWhereIn('abreviacion', ['UND', 'U', 'NIU'])
+                ->first();
+
+            $unidades = collect($unidadBase ? [$unidadBase] : []);
 
             if ($variacion && $variacion->producto && $variacion->producto->empaques->count() > 0) {
                 $empaques = $variacion->producto->empaques->map(fn ($e) => $e->unidadMedida)->filter();
                 $unidades = $unidades->merge($empaques);
             }
 
-            return $unidades->unique('id');
+            return $unidades->isNotEmpty() ? $unidades->unique('id') : UnidadMedida::where('activo', true)->get();
         }
 
         return UnidadMedida::where('activo', true)->get();
