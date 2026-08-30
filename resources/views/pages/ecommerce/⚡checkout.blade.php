@@ -24,7 +24,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
     public string $direccionEnvio = '';
 
     // Payment
-    public string $metodoPago = 'transferencia'; // 'transferencia', 'tarjeta', 'yape_plin'
+    public string $metodoPago = 'transferencia'; // 'transferencia', 'tarjeta', 'yape_plin', 'whatsapp'
 
     // Coupon
     public string $couponCode = '';
@@ -33,6 +33,9 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
 
     // Notes
     public string $comentarios = '';
+
+    // Número de WhatsApp oficial de atención
+    public string $telefonoWhatsappTienda = '51999999999';
 
     /**
      * Mount the component and initialize.
@@ -54,6 +57,67 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
         if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
             $this->metodoPago = 'coordinar';
         }
+    }
+
+    /**
+     * Generate structured WhatsApp order URL.
+     */
+    #[Computed]
+    public function urlPedidoWhatsapp(): string
+    {
+        $user = Auth::user();
+        $cliente = $user?->cliente;
+        $items = $this->items;
+        $tot = $this->resumen;
+
+        $msg = "🎒 *¡HOLA MOCHILAS LOGAN! Deseo realizar un nuevo pedido:*\n\n";
+        
+        if ($user) {
+            $msg .= "👤 *Cliente:* " . $user->name . "\n";
+            if ($user->email) $msg .= "📧 *Email:* " . $user->email . "\n";
+            if ($cliente?->telefono) $msg .= "📱 *Teléfono:* " . $cliente->telefono . "\n";
+            if ($cliente?->dni) $msg .= "🪪 *DNI:* " . $cliente->dni . "\n";
+            if ($cliente?->ruc) $msg .= "🏢 *RUC:* " . $cliente->ruc . " - " . $cliente->razon_social . "\n";
+        }
+
+        $msg .= "\n📦 *PRODUCTOS DEL PEDIDO:*\n";
+        foreach ($items as $i => $item) {
+            $msg .= ($i + 1) . ". *" . $item['nombre'] . "*\n";
+            $msg .= "   • " . $item['detalles'] . " | Cant: " . $item['cantidad'] . "\n";
+            $msg .= "   • Subtotal: S/ " . number_format($item['subtotal'], 2) . "\n";
+        }
+
+        $msg .= "\n🚚 *MODALIDAD DE ENTREGA:* ";
+        if ($this->tipoEntrega === 'recojo') {
+            $sede = Sede::find($this->sedeRecojo);
+            $msg .= "Retiro en tienda (" . ($sede?->nombre ?? 'Sede Principal') . " - " . ($sede?->direccion ?? '') . ")\n";
+        } else {
+            $msg .= "Envío a Domicilio (+S/ 9.90)\n";
+            $msg .= "📍 *Dirección:* " . ($this->direccionEnvio ?: 'Por coordinar') . "\n";
+        }
+
+        $msg .= "💳 *MEDIO DE PAGO:* ";
+        $mediosMap = [
+            'transferencia' => 'Transferencia Bancaria',
+            'tarjeta' => 'Tarjeta Débito/Crédito',
+            'yape_plin' => 'Yape / Plin',
+            'whatsapp' => 'Coordinar Pago por WhatsApp',
+            'coordinar' => 'Mayorista (Abono por coordinar)',
+        ];
+        $msg .= ($mediosMap[$this->metodoPago] ?? ucfirst($this->metodoPago)) . "\n";
+
+        if ($this->appliedCouponId && $this->couponDiscountAmount > 0) {
+            $msg .= "🏷️ *Cupón aplicado:* -" . number_format($this->couponDiscountAmount, 2) . "\n";
+        }
+
+        if (!empty($this->comentarios)) {
+            $msg .= "📝 *Notas:* " . $this->comentarios . "\n";
+        }
+
+        $msg .= "\n💰 *TOTAL A PAGAR:* S/ " . number_format($tot['total'], 2) . "\n";
+        $msg .= "\n_Quedo a la espera de la confirmación de mi pedido. ¡Gracias!_";
+
+        return 'https://api.whatsapp.com/send?phone=' . $this->telefonoWhatsappTienda . '&text=' . urlencode($msg);
     }
 
     /**
@@ -414,7 +478,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                         </div>
                     </div>
                 @else
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <button wire:click.prevent="$set('metodoPago', 'transferencia')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
                             <flux:icon name="building-library" class="size-6 mx-auto mb-2 {{ $metodoPago === 'transferencia' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
                             <div class="text-xs font-bold {{ $metodoPago === 'transferencia' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Transferencia') }}</div>
@@ -428,6 +492,11 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                         <button wire:click.prevent="$set('metodoPago', 'yape_plin')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'yape_plin' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
                             <flux:icon name="device-phone-mobile" class="size-6 mx-auto mb-2 {{ $metodoPago === 'yape_plin' ? 'text-black dark:text-white' : 'text-zinc-400' }}" />
                             <div class="text-xs font-bold {{ $metodoPago === 'yape_plin' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500' }}">{{ __('Yape / Plin') }}</div>
+                        </button>
+
+                        <button wire:click.prevent="$set('metodoPago', 'whatsapp')" class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'whatsapp' ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <flux:icon name="chat-bubble-left-right" class="size-6 mx-auto mb-2 {{ $metodoPago === 'whatsapp' ? 'text-emerald-600' : 'text-zinc-400' }}" />
+                            <div class="text-xs font-bold {{ $metodoPago === 'whatsapp' ? 'text-emerald-700 dark:text-emerald-400' : 'text-zinc-500' }}">{{ __('WhatsApp') }}</div>
                         </button>
                     </div>
                 @endif
@@ -470,6 +539,22 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
         <div class="lg:col-span-1">
             <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5 shadow-sm sticky top-24">
                 <flux:heading size="lg" class="font-extrabold text-zinc-900 dark:text-white">{{ __('Resumen de la compra') }}</flux:heading>
+
+                @guest
+                    <!-- Banner de Iniciar Sesión para Checkout -->
+                    <div class="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-start gap-3">
+                        <flux:icon name="user-circle" class="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                        <div class="text-xs text-blue-900 dark:text-blue-200">
+                            <p class="font-bold">{{ __('¿Ya tienes cuenta?') }}</p>
+                            <p class="mt-0.5 text-blue-700 dark:text-blue-300">{{ __('Inicia sesión para vincular tu pedido y acumular historial.') }}</p>
+                            <div class="flex items-center gap-2 mt-2">
+                                <a href="{{ route('login') }}" wire:navigate class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Iniciar Sesión') }}</a>
+                                <span>•</span>
+                                <a href="{{ route('register') }}" wire:navigate class="font-bold underline text-blue-700 dark:text-blue-300 hover:text-blue-900">{{ __('Crear Cuenta') }}</a>
+                            </div>
+                        </div>
+                    </div>
+                @endguest
 
                 <div class="space-y-3 text-sm">
                     <div class="flex justify-between">
@@ -520,13 +605,27 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')] class ext
                     @endif
                 </div>
 
-                <!-- Pay Button -->
-                <flux:button variant="primary" wire:click.prevent="confirmarCompra" class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
-                    <span wire:loading.remove wire:target="confirmarCompra">
-                        {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
-                    </span>
-                    <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
-                </flux:button>
+                <!-- Action Buttons: WhatsApp or Direct Payment -->
+                <div class="space-y-2.5">
+                    @auth
+                        <flux:button variant="primary" wire:click.prevent="confirmarCompra" class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="confirmarCompra">
+                                {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
+                            </span>
+                            <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
+                        </flux:button>
+                    @else
+                        <a href="{{ route('login') }}" wire:navigate class="w-full h-12 rounded-xl font-bold text-base bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity">
+                            {{ __('Iniciar Sesión para Pagar') }}
+                        </a>
+                    @endauth
+
+                    <!-- Botón Pedir por WhatsApp -->
+                    <a href="{{ $this->urlPedidoWhatsapp }}" target="_blank" rel="noopener noreferrer" class="w-full h-11 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2 transition-colors shadow-sm">
+                        <flux:icon name="chat-bubble-left-right" class="size-5" />
+                        {{ __('Pedir por WhatsApp') }}
+                    </a>
+                </div>
 
                 <!-- Terms -->
                 <p class="text-xxs text-zinc-400 text-center leading-relaxed">

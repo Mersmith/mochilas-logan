@@ -67,13 +67,14 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         if ($this->producto->variacions->isNotEmpty()) {
             $defaultVariation = $this->producto->variacions->first();
             foreach ($defaultVariation->valores as $valor) {
-                $this->selectedAttributes[$valor->atributo->nombre] = $valor->valor;
+                $this->selectedAttributes[$valor->atributo->nombre] = (string) $valor->valor;
             }
         } else {
             $available = $this->atributosDisponibles;
             foreach ($available as $name => $vals) {
                 if (!empty($vals)) {
-                    $this->selectedAttributes[$name] = reset($vals);
+                    $first = reset($vals);
+                    $this->selectedAttributes[$name] = is_array($first) ? (string) ($first['valor'] ?? '') : (string) $first;
                 }
             }
         }
@@ -455,9 +456,12 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                             <!-- Atributos dinámicos del producto -->
                             @php $index = 0; @endphp
                             @foreach($this->atributosDisponibles as $nombreAtributo => $valores)
+                                @php
+                                    $nombresValores = collect($valores)->map(fn($v) => is_array($v) ? ($v['valor'] ?? '') : $v)->filter()->implode(', ');
+                                @endphp
                                 <tr class="{{ $index % 2 == 0 ? '' : 'bg-zinc-50 dark:bg-zinc-900/50' }}">
                                     <td class="px-4 py-3 font-medium text-zinc-900 dark:text-white w-1/3">{{ $nombreAtributo }}</td>
-                                    <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ implode(', ', $valores) }}</td>
+                                    <td class="px-4 py-3 text-zinc-600 dark:text-zinc-400">{{ $nombresValores }}</td>
                                 </tr>
                                 @php $index++; @endphp
                             @endforeach
