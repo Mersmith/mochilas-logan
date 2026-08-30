@@ -25,20 +25,31 @@ class UbigeoPeruSeeder extends Seeder
     public function run(): void
     {
         // ── 1. País: Perú ─────────────────────────────────────────────────────
-        $peruId = DB::table('paises')->insertGetId([
-            'nombre' => 'Perú',
-            'codigo_iso2' => 'PE',
-            'codigo_iso3' => 'PER',
-            'prefijo_telefono' => '+51',
-            'label_nivel1' => 'Región',
-            'label_nivel2' => 'Provincia',
-            'label_nivel3' => 'Distrito',
-            'simbolo_moneda' => 'S/.',
-            'codigo_moneda' => 'PEN',
-            'activo' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $peru = DB::table('paises')->where('codigo_iso2', 'PE')->first();
+
+        if (! $peru) {
+            $peruId = DB::table('paises')->insertGetId([
+                'nombre' => 'Perú',
+                'codigo_iso2' => 'PE',
+                'codigo_iso3' => 'PER',
+                'prefijo_telefono' => '+51',
+                'label_nivel1' => 'Región',
+                'label_nivel2' => 'Provincia',
+                'label_nivel3' => 'Distrito',
+                'simbolo_moneda' => 'S/.',
+                'codigo_moneda' => 'PEN',
+                'activo' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            $peruId = $peru->id;
+        }
+
+        // Si ya hay ubigeos cargados para Perú, no volver a insertar para evitar duplicados
+        if (DB::table('ubigeos')->where('pais_id', $peruId)->exists()) {
+            return;
+        }
 
         // ── 2. Regiones (nivel 1) ─────────────────────────────────────────────
         $regionMap = $this->insertRegiones($peruId);
@@ -49,7 +60,9 @@ class UbigeoPeruSeeder extends Seeder
         // ── 4. Distritos (nivel 3) ────────────────────────────────────────────
         $this->insertDistritos($peruId, $provinciaMap);
 
-        $this->command->info('✅ Perú cargado: '.count($regionMap).' regiones, '.count($provinciaMap).' provincias, 1831 distritos.');
+        if ($this->command) {
+            $this->command->info('✅ Perú cargado: '.count($regionMap).' regiones, '.count($provinciaMap).' provincias, 1831 distritos.');
+        }
     }
 
     // ─── Parsers ──────────────────────────────────────────────────────────────

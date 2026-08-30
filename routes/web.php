@@ -63,12 +63,18 @@ Route::get('/optimize-app', function () {
     return '¡Aplicación optimizada con éxito!';
 });
 
-// Ejecutar migrate:fresh --seed
+// Ejecutar migraciones completas y seeders
 Route::get('/run-migrations', function () {
-    Artisan::call('migrate:fresh', [
-        '--seed' => true,
-        '--force' => true,
-    ]);
+    try {
+        // Opción segura y directa:
+        Artisan::call('migrate', ['--force' => true]);
+        $output = Artisan::output();
 
-    return '<pre>'.Artisan::output().'</pre><br>¡Migrate Fresh con Seeds ejecutado con éxito!';
+        Artisan::call('db:seed', ['--force' => true]);
+        $output .= "\n".Artisan::output();
+
+        return '<pre>'.$output.'</pre><br>¡Tablas y seeders creados exitosamente!';
+    } catch (Throwable $e) {
+        return '<pre>'.$e->getMessage()."\n".$e->getTraceAsString().'</pre>';
+    }
 });
