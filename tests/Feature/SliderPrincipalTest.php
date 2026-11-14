@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\Categoria;
+use App\Models\Marca;
+use App\Models\Producto;
 use App\Models\SliderPrincipal;
+use App\Models\TipoProducto;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -40,6 +44,31 @@ test('welcome page renders successfully and displays active sliders', function (
 
     $response->assertSuccessful();
     $response->assertSee('Super Banner Logan');
+});
+
+test('welcome page displays category product sliders', function () {
+    $categoria = Categoria::factory()->create([
+        'nombre' => 'Mochilas Urbanas 2026',
+        'activo' => true,
+    ]);
+
+    $tipo = TipoProducto::factory()->create();
+    $marca = Marca::factory()->create();
+
+    Producto::create([
+        'categoria_id' => $categoria->id,
+        'tipo_producto_id' => $tipo->id,
+        'marca_id' => $marca->id,
+        'nombre' => 'Mochila Urbana Pro',
+        'slug' => 'mochila-urbana-pro',
+        'activo' => true,
+    ]);
+
+    $response = $this->get(route('home'));
+
+    $response->assertSuccessful();
+    $response->assertSee('Mochilas Urbanas 2026');
+    $response->assertSee('Mochila Urbana Pro');
 });
 
 test('unauthenticated users cannot access sliders management', function () {

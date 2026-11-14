@@ -154,4 +154,115 @@ class Producto extends Model implements HasMedia
     {
         return $this->belongsToMany(Descuento::class, 'producto_descuentos');
     }
+
+    /**
+     * URL de la imagen principal del producto con fallback.
+     */
+    public function getImagenUrlAttribute(): string
+    {
+        if ($this->hasMedia('imagen_principal')) {
+            return $this->getFirstMediaUrl('imagen_principal', 'card') ?: $this->getFirstMediaUrl('imagen_principal');
+        }
+
+        if ($this->hasMedia('galeria')) {
+            return $this->getFirstMediaUrl('galeria', 'card') ?: $this->getFirstMediaUrl('galeria');
+        }
+
+        return asset('assets/imagen/default.jpg');
+    }
+
+    /**
+     * Precio base referencial (según lista de precio del cliente o precio menor).
+     */
+    public function getPrecioBaseAttribute(): float
+    {
+        $nombreListaPrecio = 'Precio Menor';
+        if (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') {
+            $nombreListaPrecio = auth()->user()->cliente->listaPrecio->nombre ?? 'Precio Mayor';
+        }
+
+        $firstVariation = $this->variacions->first();
+        if (! $firstVariation) {
+            return 0.00;
+        }
+
+        if ($firstVariation->relationLoaded('precios')) {
+            $precioItem = $firstVariation->precios->first(function ($p) use ($nombreListaPrecio) {
+                return str_contains(strtolower($p->listaPrecio?->nombre ?? ''), strtolower($nombreListaPrecio));
+            }) ?? $firstVariation->precios->first();
+
+            return (float) ($precioItem?->precio ?? 0.00);
+        }
+
+        $precio = $firstVariation->precios()
+            ->whereHas('listaPrecio', fn ($q) => $q->where('nombre', 'like', '%'.$nombreListaPrecio.'%'))
+            ->value('precio') ?? $firstVariation->precios()->value('precio');
+
+        return (float) ($precio ?? 0.00);
+    }
+
+    /**
+     * Descuento vigente si aplica.
+     */
+    public function getDescuentoActivoAttribute(): ?Descuento
+    {
+        if ($this->relationLoaded('descuentos')) {
+            return $this->descuentos->first(function ($d) {
+                return $d->activo &&
+                    (! $d->fecha_inicio || $d->fecha_inicio <= now()) &&
+                    (! $d->fecha_fin || $d->fecha_fin >= now());
+            });
+        }
+
+        return $this->descuentos()
+            ->where('activo', true)
+            ->where(fn ($q) => $q->whereNull('fecha_inicio')->orWhere('fecha_inicio', '<=', now()))
+            ->where(fn ($q) => $q->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', now()))
+            ->first();
+    }
+
+    public function getTieneDescuentoAttribute(): bool
+    {
+        return $this->descuento_activo !== null;
+    }
+
+    public function getPorcentajeDescuentoAttribute(): int
+    {
+        return $this->descuento_activo ? (int) $this->descuento_activo->porcentaje_descuento : 0;
+    }
+
+    public function getPrecioFinalAttribute(): float
+    {
+        $base = $this->precio_base;
+        if ($this->tiene_descuento) {
+            return round($base * (1 - $this->porcentaje_descuento / 100), 2);
+        }
+
+        return $base;
+    }
+
+    /**
+     * Extrae colores disponibles de las variaciones.
+     *
+     * @return array<int, array{nombre: string, hex: ?string}>
+     */
+    public function getColoresDisponiblesAttribute(): array
+    {
+        $colors = [];
+        foreach ($this->variacions as $v) {
+            if (! $v->relationLoaded('valores')) {
+                continue;
+            }
+            foreach ($v->valores as $val) {
+                if ($val->relationLoaded('atributo') && str_contains(strtolower($val->atributo->nombre ?? ''), 'color')) {
+                    $colors[$val->valor] = [
+                        'nombre' => $val->valor,
+                        'hex' => $val->codigo_color_hex,
+                    ];
+                }
+            }
+        }
+
+        return array_values($colors);
+    }
 }

@@ -20,7 +20,7 @@ class GuiaInventarioSeeder extends Seeder
     public function run(): void
     {
         // 16. Registrar una Guía de Entrada Inicial (Alimentación de Inventario)
-        $admin = User::where('email', 'admin@logan.com')->firstOrFail();
+        $admin = User::where('email', 'root@logan.com')->firstOrFail();
         $provLogan = Proveedor::where('ruc', '20601234567')->firstOrFail();
         $sedeCentral = Sede::where('nombre', 'Sede Central Lima')->firstOrFail();
         $almacenCentral = Almacen::where('nombre', 'Almacén Central Principal')->firstOrFail();
