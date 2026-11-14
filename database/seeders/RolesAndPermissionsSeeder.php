@@ -87,6 +87,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'sedes.crear',
             'sedes.editar',
 
+            // Sliders Principales
+            'sliders.ver',
+            'sliders.crear',
+            'sliders.editar',
+            'sliders.eliminar',
+
             // Seguridad (Roles y Permisos)
             'roles.ver',
             'roles.crear',

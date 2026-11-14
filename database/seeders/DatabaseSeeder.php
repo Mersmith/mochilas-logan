@@ -19,6 +19,9 @@ class DatabaseSeeder extends Seeder
             // 1. Geografía
             UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
 
+            // Contenido Web
+            SliderPrincipalSeeder::class,
+
             // 2. Organización
             /*SedeSeeder::class,
             AlmacenSeeder::class,

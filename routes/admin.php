@@ -144,6 +144,19 @@ Route::middleware(['auth', 'verified', 'can:panel.acceder'])
             ->middleware('can:almacenes.editar');
 
         // =============================================
+        // MARKETING & SITIO WEB: Sliders Principales
+        // =============================================
+        Route::livewire('sliders', 'pages::erp.sliders.index')
+            ->name('sliders.index')
+            ->middleware('can:sliders.ver');
+        Route::livewire('sliders/crear', 'pages::erp.sliders.create')
+            ->name('sliders.create')
+            ->middleware('can:sliders.crear');
+        Route::livewire('sliders/{slider}/editar', 'pages::erp.sliders.edit')
+            ->name('sliders.edit')
+            ->middleware('can:sliders.editar');
+
+        // =============================================
         // MANTENIMIENTO: Clasificación
         // =============================================
 

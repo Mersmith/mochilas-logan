@@ -70,7 +70,7 @@
         <flux:sidebar.group :heading="__('Negocio')" class="grid">
             <!-- 1. Organización -->
             <flux:sidebar.group expandable
-                :expanded="request()->routeIs('admin.empresa.*') || request()->routeIs('admin.sedes.*') || request()->routeIs('admin.almacenes.*')"
+                :expanded="request()->routeIs('admin.empresa.*') || request()->routeIs('admin.sedes.*') || request()->routeIs('admin.almacenes.*') || request()->routeIs('admin.sliders.*')"
                 :heading="__('Organización')" icon="building-office">
                 <flux:sidebar.item icon="building-storefront" :href="route('admin.empresa.index')"
                     :current="request()->routeIs('admin.empresa.*')" wire:navigate>
@@ -86,6 +86,12 @@
                     <flux:sidebar.item icon="archive-box" :href="route('admin.almacenes.index')"
                         :current="request()->routeIs('admin.almacenes.index*')" wire:navigate>
                         {{ __('Almacenes') }}
+                    </flux:sidebar.item>
+                @endcan
+                @can('sliders.ver')
+                    <flux:sidebar.item icon="photo" :href="route('admin.sliders.index')"
+                        :current="request()->routeIs('admin.sliders.*')" wire:navigate>
+                        {{ __('Sliders Web') }}
                     </flux:sidebar.item>
                 @endcan
             </flux:sidebar.group>
