@@ -3,6 +3,7 @@
 use App\Models\Producto;
 use App\Models\Variacion;
 use App\Models\Descuento;
+use App\Models\EmpresaConfiguracion;
 use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Layout;
@@ -175,9 +176,34 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         // Redirect to detail to refresh counts
         $this->redirect(route('producto.detalle', ['producto' => $this->producto->id, 'slug' => $this->slug]), navigate: true);
     }
+
+    /**
+     * Get related products from the same category.
+     */
+    #[Computed]
+    public function productosRelacionados()
+    {
+        return Producto::where('activo', true)
+            ->where('id', '!=', $this->producto->id)
+            ->when($this->producto->categoria_id, fn($q) => $q->where('categoria_id', $this->producto->categoria_id))
+            ->with([
+                'marca',
+                'categoria',
+                'descuentos' => fn($dq) => $dq->where('activo', true)
+                    ->where(fn($sq) => $sq->whereNull('fecha_inicio')->orWhere('fecha_inicio', '<=', now()))
+                    ->where(fn($sq) => $sq->whereNull('fecha_fin')->orWhere('fecha_fin', '>=', now())),
+                'variacions.precios.listaPrecio',
+                'variacions.valores.atributo',
+                'media',
+            ])
+            ->latest()
+            ->take(10)
+            ->get();
+    }
 }; ?>
 
-<div class="max-w-6xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
+<div class="space-y-12">
+    <div class="max-w-6xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
     <!-- Volver al catálogo link -->
     <div class="mb-6">
         <a href="{{ route('catalogo') }}" wire:navigate class="inline-flex items-center text-xs font-semibold text-zinc-500 hover:text-black dark:hover:text-white transition-colors gap-1.5">
@@ -371,6 +397,39 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
                     </flux:button>
                 </div>
             @endif
+
+            <!-- Botón Consultar por WhatsApp -->
+            @php
+                $empresaConfig = \App\Models\EmpresaConfiguracion::getEmpresa();
+                $whatsappNumero = preg_replace('/[^0-9]/', '', $empresaConfig->whatsapp_pedidos ?? '');
+
+                $detalleOpciones = [];
+                foreach ($this->selectedAttributes as $attrK => $attrV) {
+                    $detalleOpciones[] = "{$attrK}: {$attrV}";
+                }
+                $textoOpciones = !empty($detalleOpciones) ? ' (' . implode(', ', $detalleOpciones) . ')' : '';
+                $urlActual = url()->current();
+
+                $mensajeWhatsapp = "¡Hola! Estoy interesado en este producto:\n"
+                    . "🎒 *{$producto->nombre}*{$textoOpciones}\n"
+                    . "💰 Precio: S/ " . number_format($finalPrice, 2) . "\n"
+                    . "🔗 Ver producto: {$urlActual}\n\n"
+                    . "¿Tienen stock disponible y opciones de envío?";
+            @endphp
+
+            @if($whatsappNumero)
+                <div class="pt-1">
+                    <a href="https://wa.me/{{ $whatsappNumero }}?text={{ rawurlencode($mensajeWhatsapp) }}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="w-full h-11 px-4 rounded-xl font-bold flex items-center justify-center gap-2.5 transition-all bg-[#25D366] hover:bg-[#20ba59] text-white shadow-sm hover:shadow active:scale-[0.99]">
+                        <svg class="size-5 fill-current" viewBox="0 0 24 24">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                        <span>{{ __('Consultar por WhatsApp') }}</span>
+                    </a>
+                </div>
+            @endif
         </div>
     </div>
     
@@ -465,4 +524,17 @@ new #[Title('Detalle de Mochila'), Layout('layouts.publico')] class extends Comp
         </div>
 
     </div>
+</div>
+
+    @if($this->productosRelacionados->isNotEmpty())
+        <div class="max-w-6xl mx-auto">
+            <x-slider-productos
+                :categoria="$producto->categoria"
+                :productos="$this->productosRelacionados"
+                :titulo="__('Productos Relacionados')"
+                :subtitulo="$producto->categoria ? __('Más opciones de la categoría :cat', ['cat' => $producto->categoria->nombre]) : null"
+                :linkVerMas="$producto->categoria ? route('catalogo', ['categoria' => $producto->categoria->id]) : route('catalogo')"
+            />
+        </div>
+    @endif
 </div>

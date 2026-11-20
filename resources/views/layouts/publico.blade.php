@@ -3,13 +3,19 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-white dark:bg-zinc-800">
+    <body class="min-h-screen flex flex-col bg-white dark:bg-zinc-800">
         @include('layouts.publico.navbar')
 
         <!-- Contenido de E-Commerce -->
-        <flux:main container class="py-10">
+        <main class="flex-1 py-10 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
             {{ $slot }}
-        </flux:main>
+        </main>
+
+        <!-- Pie de página -->
+        <x-footer-publico />
+
+        <!-- WhatsApp flotante -->
+        <x-whatsapp-flotante />
 
         @persist('toast')
             <flux:toast.group>
