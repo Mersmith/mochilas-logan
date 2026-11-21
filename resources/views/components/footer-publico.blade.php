@@ -1,5 +1,9 @@
+@props([
+    'empresa' => null,
+])
+
 @php
-    $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
+    $empresa = $empresa ?? \App\Models\EmpresaConfiguracion::getEmpresa();
 @endphp
 
 <footer class="bg-zinc-900 text-zinc-300 mt-16">

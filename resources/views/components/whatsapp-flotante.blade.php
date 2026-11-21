@@ -1,10 +1,16 @@
+@props([
+    'empresa' => null,
+    'mensaje' => '¡Hola! Me gustaría hacer un pedido 😊',
+])
+
 @php
-    $whatsapp = \App\Models\EmpresaConfiguracion::getEmpresa()->whatsapp_pedidos;
-    $mensaje  = urlencode('Hola! Me gustaría hacer un pedido 😊');
+    $whatsapp = $empresa?->whatsapp_pedidos ?? '51916647675';
+    $numeroLimpio = preg_replace('/[^0-9]/', '', $whatsapp);
+    $mensajeUrl = rawurlencode($mensaje);
 @endphp
 
-@if ($whatsapp)
-    <a href="https://wa.me/{{ $whatsapp }}?text={{ $mensaje }}"
+@if ($numeroLimpio)
+    <a href="https://wa.me/{{ $numeroLimpio }}?text={{ $mensajeUrl }}"
        target="_blank"
        rel="noopener noreferrer"
        aria-label="Contáctanos por WhatsApp"

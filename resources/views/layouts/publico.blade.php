@@ -12,10 +12,10 @@
         </main>
 
         <!-- Pie de página -->
-        <x-footer-publico />
+        <x-footer-publico :empresa="$empresa" />
 
         <!-- WhatsApp flotante -->
-        <x-whatsapp-flotante />
+        <x-whatsapp-flotante :empresa="$empresa" />
 
         @persist('toast')
             <flux:toast.group>

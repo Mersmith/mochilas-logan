@@ -15,21 +15,8 @@
 
         <!-- 2. Menú de Usuario / Login / Bolsa de Compras (A la derecha) -->
         <div class="flex items-center gap-2 order-2 md:order-3">
-            <!-- Bolsa de Compras -->
-            @php
-                $cartCount = \App\Services\CartService::count();
-            @endphp
-            <a href="{{ route('carrito') }}" wire:navigate class="relative inline-block"
-                title="{{ __('Bolsa de compras') }}">
-                <flux:button variant="ghost" icon="shopping-bag" class="relative size-9" :as="'span'">
-                    @if($cartCount > 0)
-                        <span
-                            class="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full text-[9px] font-extrabold h-4.5 w-4.5 flex items-center justify-center shadow-sm">
-                            {{ $cartCount }}
-                        </span>
-                    @endif
-                </flux:button>
-            </a>
+            <!-- Bolsa de Compras Reactiva -->
+            <livewire:ecommerce.cart-button />
 
             @auth
                 <!-- Si el usuario es administrador, mostrar link a Dashboard -->

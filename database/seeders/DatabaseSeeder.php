@@ -12,15 +12,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-                // 0. Seguridad (No depende de nadie)
+            // 0. Seguridad (No depende de nadie)
             RolesAndPermissionsSeeder::class,
             UserSeeder::class,
 
-                // 1. Geografía
+            // 1. Geografía
             UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
 
-                // Contenido Web
-            SliderPrincipalSeeder::class,
+            // Contenido Web
+            /*SliderPrincipalSeeder::class,
 
                 // 2. Organización
             SedeSeeder::class,
@@ -48,7 +48,7 @@ class DatabaseSeeder extends Seeder
             ProductoSeeder::class,
 
                 // 8. Transacciones iniciales
-            GuiaInventarioSeeder::class,
+            GuiaInventarioSeeder::class,*/
         ]);
     }
 }

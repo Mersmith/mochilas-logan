@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Cache;
 
 class EmpresaConfiguracion extends Model
 {
@@ -41,6 +42,17 @@ class EmpresaConfiguracion extends Model
     public function tipoDocumentoWeb(): BelongsTo
     {
         return $this->belongsTo(TipoDocumento::class, 'tipo_documento_web_id');
+    }
+
+    protected static function booted()
+    {
+        static::saved(function () {
+            Cache::forget('empresa_configuracion_global');
+        });
+
+        static::deleted(function () {
+            Cache::forget('empresa_configuracion_global');
+        });
     }
 
     /**

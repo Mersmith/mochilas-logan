@@ -1,11 +1,11 @@
 @props([
-    'sliders' => null,
+    'sliders' => collect(),
     'autoplay' => true,
     'duration' => 5000,
 ])
 
 @php
-    $slidersCollection = $sliders ?? \App\Models\SliderPrincipal::activos()->ordenados()->get();
+    $slidersCollection = $sliders instanceof \Illuminate\Support\Collection ? $sliders : collect($sliders ?? []);
     $total = $slidersCollection->count();
 @endphp
 

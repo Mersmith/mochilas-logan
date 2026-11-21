@@ -3,8 +3,8 @@
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
-// Página de inicio
-Route::view('/', 'welcome')->name('home');
+// Página de inicio (Livewire Volt Component)
+Route::livewire('/', 'pages::ecommerce.home')->name('home');
 
 // =============================================
 // DESPACHADOR DE DASHBOARD SEGÚN ROL
@@ -39,7 +39,7 @@ Route::get('dashboard', function () {
     return redirect()->route('login');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-require __DIR__ . '/settings.php';
+require __DIR__.'/settings.php';
 
 // Crear Storage Link
 Route::get('/symlink', function () {
@@ -72,8 +72,8 @@ Route::get('/run-migrations', function () {
         ]);
         $output = Artisan::output();
 
-        return '<pre>' . $output . '</pre><br>¡Base de datos reseteada y creada desde cero con seeds exitosamente!';
+        return '<pre>'.$output.'</pre><br>¡Base de datos reseteada y creada desde cero con seeds exitosamente!';
     } catch (Throwable $e) {
-        return '<pre>' . $e->getMessage() . "\n" . $e->getTraceAsString() . '</pre>';
+        return '<pre>'.$e->getMessage()."\n".$e->getTraceAsString().'</pre>';
     }
 });
