@@ -12,15 +12,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            // 0. Seguridad (No depende de nadie)
+                // 0. Seguridad (No depende de nadie)
             RolesAndPermissionsSeeder::class,
             UserSeeder::class,
 
-            // 1. Geografía
+                // 1. Geografía
             UbigeoPeruSeeder::class,   // Crea Perú en paises + 28 regiones, 194 provincias, 1831 distritos
 
-            // Contenido Web
-            /*SliderPrincipalSeeder::class,
+                // Contenido Web
+            SliderPrincipalSeeder::class,
 
                 // 2. Organización
             SedeSeeder::class,
@@ -41,8 +41,8 @@ class DatabaseSeeder extends Seeder
             ListaPrecioSeeder::class,
             ProveedorSeeder::class,
 
-                // 6. Clientes (depende de: Ubigeo, ListaPrecio, Roles)
-            ClienteSeeder::class,
+            // 6. Clientes (depende de: Ubigeo, ListaPrecio, Roles)
+            /*ClienteSeeder::class,
 
                 // 7. Entidades complejas
             ProductoSeeder::class,

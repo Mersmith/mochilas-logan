@@ -15,7 +15,6 @@ Route::livewire('producto/{producto}/{slug}', 'pages::ecommerce.producto')->name
 // Bolsa de Compras
 Route::livewire('carrito', 'pages::ecommerce.carrito')->name('carrito');
 
-// Checkout (requiere estar autenticado)
+// Checkout (permite invitados y usuarios registrados)
 Route::livewire('checkout', 'pages::ecommerce.checkout')
-    ->name('checkout')
-    ->middleware(['auth', 'verified']);
+    ->name('checkout');

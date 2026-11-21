@@ -1,22 +1,27 @@
 <?php
 
+use App\Models\Cliente;
 use App\Models\Cupon;
 use App\Models\Inventario;
 use App\Models\Kardex;
+use App\Models\ListaPrecio;
 use App\Models\Sede;
 use App\Models\Serie;
 use App\Models\TipoDocumento;
+use App\Models\User;
 use App\Models\Variacion;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Services\IzipayService;
+use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Livewire\Component;
-use Livewire\Attributes\Title;
-use Livewire\Attributes\Layout;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
-use Flux\Flux;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Component;
 
 new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
     class extends Component {
@@ -24,6 +29,18 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
     public string $tipoEntrega = 'recojo';   // 'recojo' or 'envio'
     public ?int $sedeRecojo = null;
     public string $direccionEnvio = '';
+
+    // Guest Customer Information (Para compras sin login previo)
+    public string $guestNombre = '';
+    public string $guestEmail = '';
+    public string $guestTelefono = '';
+    public string $guestTipoDocumento = 'DNI'; // 'DNI' o 'RUC'
+    public string $guestNumeroDocumento = '';
+    public string $guestRazonSocial = '';
+
+    // Modal éxito tras compra invitado
+    public bool $compraInvitadoExitosa = false;
+    public ?string $guestCreatedEmail = null;
 
     // Payment
     public string $metodoPago = 'izipay'; // 'izipay', 'transferencia', 'tarjeta', 'yape_plin', 'whatsapp'
@@ -78,6 +95,20 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         $whatsappTienda = preg_replace('/[^0-9]/', '', $empresa->whatsapp_pedidos ?? '51916647675');
 
         $msg = "🎒 *¡HOLA " . strtoupper($empresa->nombre_comercial ?? 'MOCHILAS LOGAN') . "! Deseo realizar un nuevo pedido:*\n\n";
+
+        // Identificación de cliente (Autenticado o Invitado)
+        $clienteNombre = $user?->name ?: trim($this->guestNombre ?: 'Cliente Web');
+        $clienteDoc = $cliente?->ruc ?: ($cliente?->dni ?: trim($this->guestNumeroDocumento ?: 'N/A'));
+        $clienteTel = $cliente?->telefono ?: trim($this->guestTelefono ?: 'N/A');
+
+        $msg .= "👤 *Cliente:* {$clienteNombre}\n";
+        $msg .= "📄 *Doc:* {$clienteDoc}\n";
+        $msg .= "📞 *Tel/WhatsApp:* {$clienteTel}\n";
+        $msg .= "🚚 *Modalidad:* " . ($this->tipoEntrega === 'recojo' ? 'Retiro en Tienda' : 'Envío a Domicilio') . "\n";
+        if ($this->tipoEntrega === 'envio' && !empty(trim($this->direccionEnvio))) {
+            $msg .= "📍 *Dirección de Envío:* " . trim($this->direccionEnvio) . "\n";
+        }
+        $msg .= "\n";
 
         if ($user) {
             $msg .= "👤 *Cliente:* " . $user->name . "\n";
@@ -233,15 +264,88 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
     }
 
     /**
+     * Resolver o crear usuario para la compra (Guest o Autenticado).
+     */
+    protected function resolveCustomerUser(): User
+    {
+        if (Auth::check()) {
+            return Auth::user();
+        }
+
+        // Validaciones para cliente invitado
+        $this->validate([
+            'guestNombre' => 'required|string|min:3|max:100',
+            'guestEmail' => 'required|email|max:150',
+            'guestTelefono' => 'required|string|min:8|max:15',
+            'guestTipoDocumento' => 'required|in:DNI,RUC',
+            'guestNumeroDocumento' => $this->guestTipoDocumento === 'DNI' ? 'required|digits:8' : 'required|digits:11',
+            'guestRazonSocial' => $this->guestTipoDocumento === 'RUC' ? 'required|string|max:150' : 'nullable',
+        ], [
+            'guestNombre.required' => __('Por favor, ingresa tu nombre completo.'),
+            'guestEmail.required' => __('El correo electrónico es necesario para enviarte el comprobante.'),
+            'guestTelefono.required' => __('El número de WhatsApp/teléfono es necesario para coordinar la entrega.'),
+            'guestNumeroDocumento.required' => __('Ingresa tu número de documento de identidad.'),
+            'guestNumeroDocumento.digits' => __('El documento debe tener :digits dígitos.'),
+            'guestRazonSocial.required' => __('Ingresa la razón social para la factura.'),
+        ]);
+
+        $email = strtolower(trim($this->guestEmail));
+        $doc = trim($this->guestNumeroDocumento);
+        $esRuc = $this->guestTipoDocumento === 'RUC';
+
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            $user = User::create([
+                'name' => trim($this->guestNombre),
+                'email' => $email,
+                'password' => Hash::make(Str::random(16)),
+                'role' => 'client',
+                'activo' => true,
+            ]);
+
+            $user->assignRole('cliente');
+
+            $tarifaMinorista = ListaPrecio::where('nombre', 'like', '%menor%')
+                ->orWhere('nombre', 'like', '%minorista%')
+                ->first() ?? ListaPrecio::first();
+
+            Cliente::create([
+                'user_id' => $user->id,
+                'tipo_persona' => $esRuc ? 'juridica' : 'natural',
+                'tipo_cliente' => 'minorista',
+                'lista_precio_id' => $tarifaMinorista?->id ?? 1,
+                'dni' => $esRuc ? null : $doc,
+                'ruc' => $esRuc ? $doc : null,
+                'razon_social' => $esRuc ? trim($this->guestRazonSocial) : null,
+                'telefono' => trim($this->guestTelefono),
+                'activo' => true,
+            ]);
+        } else {
+            // Si el cliente ya existe pero faltan datos de contacto, actualizarlos
+            $cliente = $cliente = $user->cliente;
+            if ($cliente) {
+                $cliente->update([
+                    'telefono' => $cliente->telefono ?: trim($this->guestTelefono),
+                    'dni' => $cliente->dni ?: ($esRuc ? null : $doc),
+                    'ruc' => $cliente->ruc ?: ($esRuc ? $doc : null),
+                ]);
+            }
+        }
+
+        // Iniciar sesión silenciosamente
+        Auth::login($user);
+        $this->guestCreatedEmail = $user->email;
+
+        return $user;
+    }
+
+    /**
      * Process the order and create the sale record.
      */
     public function confirmarCompra(): void
     {
-        if (!Auth::check()) {
-            Flux::toast(variant: 'danger', text: __('Debes iniciar sesión para completar la compra.'));
-            $this->redirect(route('login'), navigate: true);
-            return;
-        }
+        $user = $this->resolveCustomerUser();
 
         $items = $this->items;
         if (empty($items)) {
@@ -268,7 +372,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
             return;
         }
 
-        DB::transaction(function () use ($items) {
+        DB::transaction(function () use ($items, $user) {
             $tot = $this->resumen;
             $empresa = \App\Models\EmpresaConfiguracion::getEmpresa();
 
@@ -324,7 +428,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
 
             // Create sale header
             $venta = Venta::create([
-                'user_id' => Auth::id(),
+                'user_id' => $user->id,
                 'tipo_documento_id' => $tipoDoc->id,
                 'serie' => $serie,
                 'correlativo' => $correlativo,
@@ -385,7 +489,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                         'valor_total_almacen' => ($stockAnterior - $item['cantidad']) * $item['precio_final'],
                         'origen_documento_id' => $venta->id,
                         'origen_documento_type' => Venta::class,
-                        'creado_por_usuario_id' => Auth::id(),
+                        'creado_por_usuario_id' => $user->id,
                     ]);
                 }
             }
@@ -395,8 +499,10 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
             session()->forget('public_cart');
         });
 
+        $this->compraInvitadoExitosa = true;
         Flux::toast(variant: 'success', text: __('¡Compra realizada con éxito! Tu pedido ha sido registrado.'));
-        $this->redirect(route('catalogo'), navigate: true);
+        $this->redirect(route('compras'), navigate: true);
+    }
     }
 
     /**
@@ -404,11 +510,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
      */
     public function iniciarPagoIzipay(): void
     {
-        if (!Auth::check()) {
-            Flux::toast(variant: 'danger', text: __('Debes iniciar sesión para completar la compra.'));
-            $this->redirect(route('login'), navigate: true);
-            return;
-        }
+        $user = $this->resolveCustomerUser();
 
         $items = $this->items;
         if (empty($items)) {
@@ -433,7 +535,6 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
             return;
         }
 
-        $user = Auth::user();
         $cliente = $user->cliente;
         $tot = $this->resumen;
 
@@ -441,6 +542,33 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         $orderNumber = 'ORD-' . time();
 
         $names = explode(' ', $user->name, 2);
+        $firstName = $names[0] ?? 'Cliente';
+        $lastName = $names[1] ?? 'Logan';
+
+        $buyerInfo = [
+            'id' => $user->id,
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+            'email' => $user->email,
+            'phoneNumber' => $cliente?->telefono ?? '989897960',
+            'street' => $this->tipoEntrega === 'envio' ? $this->direccionEnvio : 'Recojo en tienda',
+            'documentType' => $cliente?->ruc ? 'RUC' : 'DNI',
+            'document' => $cliente?->ruc ?? ($cliente?->dni ?? '12345678'),
+        ];
+
+        $config = IzipayService::buildConfig($transactionId, $orderNumber, $tot['total'], $buyerInfo);
+        $tokenSession = IzipayService::generateSessionToken([
+            'transactionId' => $transactionId,
+            'amount' => $tot['total'],
+        ]);
+        $keyRSA = IzipayService::getPublicKey();
+
+        $this->dispatch('abrir-izipay-popup', [
+            'config' => $config,
+            'authorization' => $tokenSession,
+            'keyRSA' => $keyRSA,
+        ]);
+    }
         $firstName = $names[0] ?? 'Cliente';
         $lastName = $names[1] ?? 'Logan';
 
@@ -496,7 +624,70 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                 {{ __('Revisa y paga tu compra') }}
             </flux:heading>
 
-            <!-- Sección 1: Punto de Entrega -->
+            <!-- Sección 1: Datos de Contacto (Para Invitados) -->
+            @guest
+                <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">
+                                {{ __('Datos del comprador') }}
+                            </flux:heading>
+                            <flux:subheading class="text-xs">
+                                {{ __('Comprobante de compra y coordinación de despacho.') }}
+                            </flux:subheading>
+                        </div>
+                        <a href="{{ route('login') }}" wire:navigate class="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+                            {{ __('¿Ya tienes cuenta? Iniciar Sesión') }}
+                        </a>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <flux:field class="sm:col-span-2">
+                            <flux:label>{{ __('Nombres y Apellidos') }}</flux:label>
+                            <flux:input wire:model.defer="guestNombre" placeholder="Ej: Carlos Ramos Salazar" required />
+                            <flux:error name="guestNombre" />
+                        </flux:field>
+
+                        <flux:field>
+                            <flux:label>{{ __('Correo electrónico') }}</flux:label>
+                            <flux:input type="email" wire:model.defer="guestEmail" placeholder="carlos@ejemplo.com" required />
+                            <flux:error name="guestEmail" />
+                        </flux:field>
+
+                        <flux:field>
+                            <flux:label>{{ __('Teléfono / WhatsApp') }}</flux:label>
+                            <flux:input type="tel" wire:model.defer="guestTelefono" placeholder="987654321" required />
+                            <flux:error name="guestTelefono" />
+                        </flux:field>
+
+                        <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <flux:field class="sm:col-span-1">
+                                <flux:label>{{ __('Comprobante') }}</flux:label>
+                                <flux:select wire:model.live="guestTipoDocumento">
+                                    <option value="DNI">Boleta (DNI)</option>
+                                    <option value="RUC">Factura (RUC)</option>
+                                </flux:select>
+                            </flux:field>
+
+                            <flux:field class="{{ $guestTipoDocumento === 'RUC' ? 'sm:col-span-1' : 'sm:col-span-2' }}">
+                                <flux:label>{{ $guestTipoDocumento === 'DNI' ? __('DNI (8 dígitos)') : __('RUC (11 dígitos)') }}</flux:label>
+                                <flux:input wire:model.defer="guestNumeroDocumento" maxlength="{{ $guestTipoDocumento === 'DNI' ? 8 : 11 }}" placeholder="{{ $guestTipoDocumento === 'DNI' ? '71234567' : '20601234567' }}" required />
+                                <flux:error name="guestNumeroDocumento" />
+                            </flux:field>
+
+                            @if($guestTipoDocumento === 'RUC')
+                                <flux:field class="sm:col-span-1">
+                                    <flux:label>{{ __('Razón Social') }}</flux:label>
+                                    <flux:input wire:model.defer="guestRazonSocial" placeholder="Empresa S.A.C." required />
+                                    <flux:error name="guestRazonSocial" />
+                                </flux:field>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            @endguest
+
+            <!-- Sección 2: Punto de Entrega -->
             <div
                 class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
                 <flux:heading size="lg" class="font-bold text-zinc-900 dark:text-white">{{ __('Punto de entrega') }}
@@ -764,34 +955,27 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                     @endif
                 </div>
 
-                <!-- Action Buttons: WhatsApp or Direct Payment -->
+                <!-- Action Buttons: WhatsApp or Direct Payment (Invitado y Registrado) -->
                 <div class="space-y-2.5">
-                    @auth
-                        @if($metodoPago === 'izipay')
-                            <button type="button" wire:click.prevent="iniciarPagoIzipay"
-                                class="w-full h-12 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99]"
-                                wire:loading.attr="disabled">
-                                <span wire:loading.remove wire:target="iniciarPagoIzipay" class="flex items-center gap-2">
-                                    <span class="size-6 rounded bg-white text-teal-700 flex items-center justify-center text-xs font-black">izi</span>
-                                    {{ __('Pagar con Izipay (Pop-up)') }}
-                                </span>
-                                <span wire:loading wire:target="iniciarPagoIzipay">{{ __('Conectando con Izipay...') }}</span>
-                            </button>
-                        @else
-                            <flux:button variant="primary" wire:click.prevent="confirmarCompra"
-                                class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
-                                <span wire:loading.remove wire:target="confirmarCompra">
-                                    {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
-                                </span>
-                                <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
-                            </flux:button>
-                        @endif
+                    @if($metodoPago === 'izipay')
+                        <button type="button" wire:click.prevent="iniciarPagoIzipay"
+                            class="w-full h-12 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99]"
+                            wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="iniciarPagoIzipay" class="flex items-center gap-2">
+                                <span class="size-6 rounded bg-white text-teal-700 flex items-center justify-center text-xs font-black">izi</span>
+                                {{ __('Pagar con Izipay (Pop-up)') }}
+                            </span>
+                            <span wire:loading wire:target="iniciarPagoIzipay">{{ __('Conectando con Izipay...') }}</span>
+                        </button>
                     @else
-                        <a href="{{ route('login') }}" wire:navigate
-                            class="w-full h-12 rounded-xl font-bold text-base bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity">
-                            {{ __('Iniciar Sesión para Pagar') }}
-                        </a>
-                    @endauth
+                        <flux:button variant="primary" wire:click.prevent="confirmarCompra"
+                            class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
+                            <span wire:loading.remove wire:target="confirmarCompra">
+                                {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
+                            </span>
+                            <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
+                        </flux:button>
+                    @endif
 
                     <!-- Botón Pedir por WhatsApp -->
                     <a href="{{ $this->urlPedidoWhatsapp }}" target="_blank" rel="noopener noreferrer"
