@@ -9,6 +9,7 @@ use App\Models\TipoDocumento;
 use App\Models\Variacion;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
+use App\Services\IzipayService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -25,7 +26,7 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
     public string $direccionEnvio = '';
 
     // Payment
-    public string $metodoPago = 'transferencia'; // 'transferencia', 'tarjeta', 'yape_plin', 'whatsapp'
+    public string $metodoPago = 'izipay'; // 'izipay', 'transferencia', 'tarjeta', 'yape_plin', 'whatsapp'
 
     // Coupon
     public string $couponCode = '';
@@ -397,6 +398,85 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
         Flux::toast(variant: 'success', text: __('¡Compra realizada con éxito! Tu pedido ha sido registrado.'));
         $this->redirect(route('catalogo'), navigate: true);
     }
+
+    /**
+     * Iniciar Checkout Pop-up con Izipay.
+     */
+    public function iniciarPagoIzipay(): void
+    {
+        if (!Auth::check()) {
+            Flux::toast(variant: 'danger', text: __('Debes iniciar sesión para completar la compra.'));
+            $this->redirect(route('login'), navigate: true);
+            return;
+        }
+
+        $items = $this->items;
+        if (empty($items)) {
+            Flux::toast(variant: 'danger', text: __('Tu carrito está vacío.'));
+            return;
+        }
+
+        foreach ($items as $item) {
+            if ($item['cantidad'] > $item['stock'] || $item['stock'] <= 0) {
+                Flux::toast(variant: 'danger', text: __('El producto "' . $item['nombre'] . '" no tiene stock suficiente.'));
+                return;
+            }
+        }
+
+        if ($this->tipoEntrega === 'recojo' && !$this->sedeRecojo) {
+            Flux::toast(variant: 'danger', text: __('Selecciona un punto de entrega.'));
+            return;
+        }
+
+        if ($this->tipoEntrega === 'envio' && empty(trim($this->direccionEnvio))) {
+            Flux::toast(variant: 'danger', text: __('Ingresa una dirección de envío.'));
+            return;
+        }
+
+        $user = Auth::user();
+        $cliente = $user->cliente;
+        $tot = $this->resumen;
+
+        $transactionId = 'TRX-' . strtoupper(uniqid());
+        $orderNumber = 'ORD-' . time();
+
+        $names = explode(' ', $user->name, 2);
+        $firstName = $names[0] ?? 'Cliente';
+        $lastName = $names[1] ?? 'Logan';
+
+        $buyerInfo = [
+            'id' => $user->id,
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+            'email' => $user->email,
+            'phoneNumber' => $cliente?->telefono ?? '989897960',
+            'street' => $this->tipoEntrega === 'envio' ? $this->direccionEnvio : 'Recojo en tienda',
+            'documentType' => $cliente?->ruc ? 'RUC' : 'DNI',
+            'document' => $cliente?->ruc ?? ($cliente?->dni ?? '12345678'),
+        ];
+
+        $config = IzipayService::buildConfig($transactionId, $orderNumber, $tot['total'], $buyerInfo);
+        $tokenSession = IzipayService::generateSessionToken([
+            'transactionId' => $transactionId,
+            'amount' => $tot['total'],
+        ]);
+        $keyRSA = IzipayService::getPublicKey();
+
+        $this->dispatch('abrir-izipay-popup', [
+            'config' => $config,
+            'authorization' => $tokenSession,
+            'keyRSA' => $keyRSA,
+        ]);
+    }
+
+    /**
+     * Callback invocado tras confirmación exitosa de Izipay.
+     */
+    public function pagoIzipayCompletado(array $izipayResponse): void
+    {
+        $this->comentarios = trim($this->comentarios . "\n[IZIPAY PAGO ONLINE]: " . ($izipayResponse['transactionId'] ?? 'Aprobado'));
+        $this->confirmarCompra();
+    }
 }; ?>
 
 <div class="max-w-6xl mx-auto">
@@ -497,6 +577,29 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                     </div>
                 @else
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <button wire:click.prevent="$set('metodoPago', 'izipay')"
+                            class="border rounded-xl p-4 text-center transition-all col-span-2 sm:col-span-4 bg-linear-to-r from-teal-500/10 to-emerald-500/10 {{ $metodoPago === 'izipay' ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/50 dark:bg-teal-950/20 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3 text-left">
+                                    <div class="size-10 rounded-lg bg-teal-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                                        izi
+                                    </div>
+                                    <div>
+                                        <div class="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                                            {{ __('Pagar con Izipay') }}
+                                            <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300">Recomendado</span>
+                                        </div>
+                                        <div class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                            {{ __('Tarjetas Visa, Mastercard, Diners, Amex, Yape y Plin') }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="shrink-0 hidden sm:block">
+                                    <span class="text-xs font-bold text-teal-600 dark:text-teal-400">Checkout Pop-up &rarr;</span>
+                                </div>
+                            </div>
+                        </button>
+
                         <button wire:click.prevent="$set('metodoPago', 'transferencia')"
                             class="border rounded-xl p-4 text-center transition-all {{ $metodoPago === 'transferencia' ? 'border-black dark:border-white bg-zinc-50 dark:bg-zinc-950 shadow-sm' : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-950' }}">
                             <flux:icon name="building-library"
@@ -664,13 +767,25 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
                 <!-- Action Buttons: WhatsApp or Direct Payment -->
                 <div class="space-y-2.5">
                     @auth
-                        <flux:button variant="primary" wire:click.prevent="confirmarCompra"
-                            class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
-                            <span wire:loading.remove wire:target="confirmarCompra">
-                                {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
-                            </span>
-                            <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
-                        </flux:button>
+                        @if($metodoPago === 'izipay')
+                            <button type="button" wire:click.prevent="iniciarPagoIzipay"
+                                class="w-full h-12 rounded-xl font-bold text-base bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99]"
+                                wire:loading.attr="disabled">
+                                <span wire:loading.remove wire:target="iniciarPagoIzipay" class="flex items-center gap-2">
+                                    <span class="size-6 rounded bg-white text-teal-700 flex items-center justify-center text-xs font-black">izi</span>
+                                    {{ __('Pagar con Izipay (Pop-up)') }}
+                                </span>
+                                <span wire:loading wire:target="iniciarPagoIzipay">{{ __('Conectando con Izipay...') }}</span>
+                            </button>
+                        @else
+                            <flux:button variant="primary" wire:click.prevent="confirmarCompra"
+                                class="w-full h-12 rounded-xl font-bold text-base" wire:loading.attr="disabled">
+                                <span wire:loading.remove wire:target="confirmarCompra">
+                                    {{ (auth()->check() && auth()->user()->cliente && auth()->user()->cliente->tipo_cliente === 'mayorista') ? __('Enviar Orden de Compra') : __('Pagar ahora') }}
+                                </span>
+                                <span wire:loading wire:target="confirmarCompra">{{ __('Procesando...') }}</span>
+                            </flux:button>
+                        @endif
                     @else
                         <a href="{{ route('login') }}" wire:navigate
                             class="w-full h-12 rounded-xl font-bold text-base bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity">
@@ -693,4 +808,39 @@ new #[Title('Checkout - Finalizar Compra'), Layout('layouts.publico')]
             </div>
         </div>
     </div>
+
+    <!-- Script SDK de Izipay para Modal Pop-up -->
+    <script src="{{ \App\Services\IzipayService::getJsSdkUrl() }}"></script>
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('abrir-izipay-popup', (eventData) => {
+                const payload = Array.isArray(eventData) ? eventData[0] : eventData;
+                const iziConfig = payload.config;
+                const authorization = payload.authorization;
+                const keyRSA = payload.keyRSA;
+
+                try {
+                    if (typeof Izipay === 'undefined') {
+                        alert('El SDK de Izipay no se ha cargado correctamente. Verifique su conexión a internet.');
+                        return;
+                    }
+
+                    const checkout = new Izipay({ config: iziConfig });
+
+                    checkout.LoadForm({
+                        authorization: authorization,
+                        keyRSA: keyRSA,
+                        callbackResponse: function (response) {
+                            console.log('Izipay Response:', response);
+                            // Notificar a Livewire para procesar la venta
+                            @this.pagoIzipayCompletado(response);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error al inicializar Izipay:', error);
+                    alert('Ocurrió un error al abrir el checkout de Izipay: ' + (error.message || 'Error desconocido'));
+                }
+            });
+        });
+    </script>
 </div>

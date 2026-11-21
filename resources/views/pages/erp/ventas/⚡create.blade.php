@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Variacion;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
+use App\Services\IzipayService;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -664,6 +665,80 @@ new #[Title('Registrar Venta')] class extends Component {
         Flux::toast(variant: 'success', text: __('Venta completada con éxito.'));
     }
 
+    /**
+     * Iniciar cobro con Izipay (Web Pop-up) en POS/Ventas.
+     */
+    public function cobrarConIzipay(): void
+    {
+        $this->validate([
+            'sede_id' => 'required|exists:sedes,id',
+            'almacen_id' => 'required|exists:almacens,id',
+            'cliente_id' => 'required|exists:users,id',
+            'tipo_documento_id' => 'required|exists:tipo_documentos,id',
+            'serie' => 'required|string|max:10',
+            'correlativo' => 'required|integer|min:1',
+            'fecha_venta' => 'required|date',
+            'cart' => 'required|array|min:1',
+        ], [
+            'cart.min' => __('Debe agregar al menos un producto al carrito para registrar la venta.'),
+        ]);
+
+        $subtotal = collect($this->cart)->sum('total');
+        $descuento = $this->couponDiscountAmount;
+        $total = max(0, $subtotal - $descuento);
+
+        if ($total <= 0) {
+            Flux::toast(variant: 'danger', text: __('El total a cobrar debe ser mayor a 0.'));
+            return;
+        }
+
+        $clienteUser = User::find($this->cliente_id);
+        $clienteModel = $clienteUser?->cliente;
+
+        $transactionId = 'POS-' . strtoupper(uniqid());
+        $orderNumber = 'VENTA-' . $this->serie . '-' . str_pad($this->correlativo, 6, '0', STR_PAD_LEFT);
+
+        $names = explode(' ', $clienteUser?->name ?? 'Cliente POS', 2);
+        $firstName = $names[0] ?? 'Cliente';
+        $lastName = $names[1] ?? 'General';
+
+        $buyerInfo = [
+            'id' => $clienteUser?->id ?? 1,
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+            'email' => $clienteUser?->email ?? 'pos@mochilaslogan.com',
+            'phoneNumber' => $clienteModel?->telefono ?? '989897960',
+            'street' => 'Venta en Tienda Física',
+            'documentType' => $clienteModel?->ruc ? 'RUC' : 'DNI',
+            'document' => $clienteModel?->ruc ?? ($clienteModel?->dni ?? '12345678'),
+        ];
+
+        $config = IzipayService::buildConfig($transactionId, $orderNumber, $total, $buyerInfo);
+        $tokenSession = IzipayService::generateSessionToken([
+            'transactionId' => $transactionId,
+            'amount' => $total,
+        ]);
+        $keyRSA = IzipayService::getPublicKey();
+
+        $this->dispatch('abrir-izipay-pos', [
+            'config' => $config,
+            'authorization' => $tokenSession,
+            'keyRSA' => $keyRSA,
+        ]);
+    }
+
+    /**
+     * Callback tras pago exitoso de Izipay en POS.
+     */
+    public function pagoIzipayPosCompletado(array $izipayResponse): void
+    {
+        $this->metodo_pago = 'tarjeta';
+        $trxId = $izipayResponse['transactionId'] ?? ('TRX-' . time());
+        $this->nota = trim($this->nota . "\n[COBRO IZIPAY POS/ONLINE]: ID " . $trxId);
+
+        $this->guardar();
+    }
+
     public function reiniciarVenta(): void
     {
         $this->cart = [];
@@ -1187,10 +1262,17 @@ new #[Title('Registrar Venta')] class extends Component {
                             </div>
                         </div>
 
-                        <div class="pt-2">
+                        <div class="pt-2 space-y-2">
                             <flux:button variant="primary" type="submit" class="w-full !py-3 !text-lg !font-bold" :disabled="empty($cart)">
                                 💳 {{ __('Completar Venta y Cobrar') }}
                             </flux:button>
+
+                            <button type="button" wire:click.prevent="cobrarConIzipay"
+                                class="w-full py-2.5 px-4 rounded-lg font-bold text-sm bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+                                :disabled="{{ empty($cart) ? 'true' : 'false' }}">
+                                <span class="size-5 rounded bg-white text-teal-700 flex items-center justify-center text-[10px] font-black">izi</span>
+                                {{ __('Cobrar con Izipay (Tarjetas / Yape QR)') }}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1322,4 +1404,38 @@ new #[Title('Registrar Venta')] class extends Component {
             </div>
         </div>
     @endif
+
+    <!-- Script SDK de Izipay para Modal Pop-up en POS/Ventas -->
+    <script src="{{ \App\Services\IzipayService::getJsSdkUrl() }}"></script>
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('abrir-izipay-pos', (eventData) => {
+                const payload = Array.isArray(eventData) ? eventData[0] : eventData;
+                const iziConfig = payload.config;
+                const authorization = payload.authorization;
+                const keyRSA = payload.keyRSA;
+
+                try {
+                    if (typeof Izipay === 'undefined') {
+                        alert('El SDK de Izipay no se ha cargado correctamente. Verifique su conexión.');
+                        return;
+                    }
+
+                    const checkout = new Izipay({ config: iziConfig });
+
+                    checkout.LoadForm({
+                        authorization: authorization,
+                        keyRSA: keyRSA,
+                        callbackResponse: function (response) {
+                            console.log('Izipay POS Response:', response);
+                            @this.pagoIzipayPosCompletado(response);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error al inicializar Izipay POS:', error);
+                    alert('Error en Izipay: ' + (error.message || 'Error desconocido'));
+                }
+            });
+        });
+    </script>
 </div>
